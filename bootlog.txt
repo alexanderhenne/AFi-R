@@ -1,0 +1,494 @@
+
+
+U-Boot unifi-home-.g345bbabc (Aug 16 2019 - 16:21:51)
+
+DRAM:
+sri
+ath_ddr_initial_config(278): (ddr2 init)
+ath_sys_frequency: cpu 775 ddr 650 ahb 258
+Tap values = (0xe, 0xe, 0xe, 0xe)
+128 MB
+Flash Manuf Id 0xc2, DeviceId0 0x20, DeviceId1 0x19
+Flash: 32 MB
+PCIe WLAN Module found (tries: 1).
+Net:   ath_gmac_enet_initialize...
+Fetching MAC Address from 0x87fec3cc
+ath_gmac_enet_initialize: reset mask:c02200
+athr_mgmt_init ::done
+Dragonfly  ----> S17 PHY *
+ ath_gmac_enet_initialize: is_s17()=1, is_ar8033()=0, phy id1=4d phy_id2=d034
+athrs17_reg_init: complete
+SGMII in forced mode
+athr_gmac_sgmii_setup SGMII done
+: cfg1 0x80000000 cfg2 0x7114
+eth0: f0:9f:c2:02:e1:48
+eth0 up
+eth0
+Setting 0x181162c0 to 0x20402100
+Board: Copyright Ubiquiti Networks Inc. 2016
+Hit any key to stop autoboot:  0
+ath> printenv
+bootargs=root=31:03 rootfstype=jffs2 init=/init console=0 panic=3
+bootcmd=run ubntappinit ubntboot
+bootdelay=1
+ipaddr=192.168.1.20
+serverip=192.168.1.254
+mtdparts=mtdparts=ath-nor0:384k(u-boot),64k(u-boot-env),11264k(firmware),768k(cfg),3776k(recovery),64k(prst),64k(EEPROM)
+ubntboot=bootm 0xBF070000
+ubntappinit=go ${ubntaddr} uappinit;go ${ubntaddr} ufsdetect
+ubntrecoveryaddr=0xBFC30000
+ubntrecovery=bootm ${ubntrecoveryaddr}
+ubnturescue=go ${ubntaddr} uappinit;urescue;go ${ubntaddr} uwrite
+stdin=serial
+stdout=serial
+stderr=serial
+ethact=eth0
+ubntaddr=80200020
+
+Environment size: 566/65532 bytes
+ath> boot
+Board: Ubiquiti Networks AR956X board (ea36-19.1150.0030.0040)
+ 0. Name = u-boot, offset = 0, start_addr=bf000000, size=393216,start_sector=0, end_sector=5
+ 1. Name = u-boot-env, offset = 60000, start_addr=bf060000, size=65536,start_sector=6, end_sector=6
+ 2. Name = firmware, offset = 70000, start_addr=bf070000, size=11534336,start_sector=7, end_sector=182
+ 3. Name = cfg, offset = b70000, start_addr=bfb70000, size=786432,start_sector=183, end_sector=194
+ 4. Name = recovery, offset = c30000, start_addr=bfc30000, size=3866624,start_sector=195, end_sector=253
+ 5. Name = prst, offset = fe0000, start_addr=bffe0000, size=65536,start_sector=254, end_sector=254
+ 6. Name = EEPROM, offset = ff0000, start_addr=bfff0000, size=65536,start_sector=255, end_sector=255
+UBNT application initialized
+Detecting boot selection
+bs1: 5AFEB007 FFFFFFFF valid inactive
+bs2: 5AFEB007 B5B5B5B5 valid active
+Second firmware is active
+EAR=1
+## Booting image at bf420000 ...
+   Image Name:   MIPS OpenWrt Linux-4.1.16
+   Created:      2019-10-29  11:33:22 UTC
+   Image Type:   MIPS Linux Kernel Image (lzma compressed)
+   Data Size:    1305802 Bytes =  1.2 MB
+   Load Address: 80060000
+   Entry Point:  80060000
+   Verifying Checksum at 0xbf420040 ...OK
+   Uncompressing Kernel Image ... OK
+
+Starting kernel ...
+
+[    0.000000] Linux version 4.1.16 (jenkins@hive) (gcc version 5.2.0 (OpenWrt GCC 5.2.0 r48688) ) #1 Tue Oct 29 11:58:41 UTC 2019
+[    0.000000] flash_size passed from bootloader = 32
+[    0.000000] bootconsole [early0] enabled
+[    0.000000] CPU0 revision is: 00019750 (MIPS 74Kc)
+[    0.000000] SoC: Qualcomm Atheros QCA956X ver 1 rev 0
+[    0.000000] Determined physical RAM map:
+[    0.000000]  memory: 08000000 @ 00000000 (usable)
+[    0.000000] Initrd not found or empty - disabling initrd
+[    0.000000] Zone ranges:
+[    0.000000]   Normal   [mem 0x0000000000000000-0x0000000007ffffff]
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000000000000-0x0000000007ffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000000000000-0x0000000007ffffff]
+[    0.000000] Primary instruction cache 64kB, VIPT, 4-way, linesize 32 bytes.
+[    0.000000] Primary data cache 32kB, 4-way, VIPT, cache aliases, linesize 32 bytes
+[    0.000000] Built 1 zonelists in Zone order, mobility grouping on.  Total pages: 32512
+[    0.000000] Kernel command line:  board=AFi-R  console=ttyS0,115200 rootfstype=squashfs,jffs2 noinitrd
+[    0.000000] PID hash table entries: 512 (order: -1, 2048 bytes)
+[    0.000000] Dentry cache hash table entries: 16384 (order: 4, 65536 bytes)
+[    0.000000] Inode-cache hash table entries: 8192 (order: 3, 32768 bytes)
+[    0.000000] Writing ErrCtl register=00000000
+[    0.000000] Readback ErrCtl register=00000000
+[    0.000000] Memory: 125140K/131072K available (2918K kernel code, 143K rwdata, 728K rodata, 296K init, 266K bss, 5932K reserved, 0K cma-reserved)
+[    0.000000] SLUB: HWalign=32, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] NR_IRQS:83
+[    0.000000] Clocks: CPU:775.000MHz, DDR:650.000MHz, AHB:258.333MHz, Ref:25.000MHz
+[    0.000000] clocksource MIPS: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 4932285024 ns
+[    0.000007] sched_clock: 32 bits at 387MHz, resolution 2ns, wraps every 5541893118ns
+[    0.008195] Calibrating delay loop... 385.84 BogoMIPS (lpj=1929216)
+[    0.071009] pid_max: default: 32768 minimum: 301
+[    0.075937] Security Framework initialized
+[    0.080261] TOMOYO Linux initialized
+[    0.084077] Mount-cache hash table entries: 1024 (order: 0, 4096 bytes)
+[    0.091040] Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes)
+[    0.100703] clocksource jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604462750000 ns
+[    0.111556] NET: Registered protocol family 16
+[    0.117306] MIPS: machine is Ubiquiti AmpliFi Router
+[    0.156880] Quick Charge enabled
+[    0.160743] registering PCI controller with io_map_base unset
+[    0.387020] SGMII_CONFIG: 0x000004aa
+[    0.390783] MR_AN_CONTROL: 0x00000140
+[    0.394633] PLL (ETH_SGMII): 0x03000101
+[    0.406299] PCI host bridge to bus 0000:00
+[    0.410658] pci_bus 0000:00: root bus resource [mem 0x12000000-0x13ffffff]
+[    0.417901] pci_bus 0000:00: root bus resource [io  0x0001]
+[    0.423776] pci_bus 0000:00: root bus resource [??? 0x00000000 flags 0x0]
+[    0.430923] pci_bus 0000:00: No busn resource found for root bus, will use [bus 00-ff]
+[    0.439660] pci 0000:00:00.0: BAR 0: assigned [mem 0x12000000-0x121fffff 64bit]
+[    0.447373] pci 0000:00:00.0: BAR 6: assigned [mem 0x12200000-0x1220ffff pref]
+[    0.455006] pci 0000:00:00.0: using irq 40 for pin 1
+[    0.460855] Switched to clocksource MIPS
+[    0.466288] NET: Registered protocol family 2
+[    0.471629] TCP established hash table entries: 1024 (order: 0, 4096 bytes)
+[    0.478976] TCP bind hash table entries: 1024 (order: 0, 4096 bytes)
+[    0.485725] TCP: Hash tables configured (established 1024 bind 1024)
+[    0.492504] UDP hash table entries: 256 (order: 0, 4096 bytes)
+[    0.498667] UDP-Lite hash table entries: 256 (order: 0, 4096 bytes)
+[    0.505547] NET: Registered protocol family 1
+[    0.511061] futex hash table entries: 256 (order: -1, 3072 bytes)
+[    0.531760] squashfs: version 4.0 (2009/01/31) Phillip Lougher
+[    0.537918] jffs2: version 2.2 (NAND) (SUMMARY) (LZMA) (RTIME) (CMODE_PRIORITY) (c) 2001-2006 Red Hat, Inc.
+[    0.550144] io scheduler noop registered
+[    0.554324] io scheduler deadline registered (default)
+[    0.559893] Serial: 8250/16550 driver, 1 ports, IRQ sharing disabled
+[    0.566960] console [ttyS0] disabled
+[    0.570749] serial8250.0: ttyS0 at MMIO 0x18020000 (irq = 11, base_baud = 1562500) is a 16550A
+[    0.579868] console [ttyS0] enabled
+[    0.579868] console [ttyS0] enabled
+[    0.587418] bootconsole [early0] disabled
+[    0.587418] bootconsole [early0] disabled
+[    0.598738] m25p80 spi0.0: found mx25l25635e, expected m25p80
+[    0.605508] m25p80 spi0.0: mx25l25635e (32768 Kbytes)
+[    0.610734] afi_part: Parsing AmpliFi partitions
+[    0.615578] afi_part: bs1: 5AFEB007 FFFFFFFF valid inactive
+[    0.621345] afi_part: bs2: 5AFEB007 B5B5B5B5 valid active
+[    0.626912] afi_part: Second firmware is active
+[    0.631589] 12 afi partitions found on MTD device spi0.0
+[    0.637065] Creating 12 MTD partitions on "spi0.0":
+[    0.642116] 0x000000000000-0x000000060000 : "u-boot"
+[    0.647978] 0x000000060000-0x000000070000 : "u-boot-env"
+[    0.654149] 0x000000fe0000-0x000000ff0000 : "prst"
+[    0.659710] 0x000000ff0000-0x000001000000 : "eeprom"
+[    0.665490] 0x000000b70000-0x000000c30000 : "cfg"
+[    0.671011] 0x000000c30000-0x000000fe0000 : "recovery"
+[    0.676977] 0x000000070000-0x000000b70000 : "fw_inactive"
+[    0.683213] 0x000001420000-0x000001f20000 : "firmware"
+[    0.726472] 2 uimage-fw partitions found on MTD device firmware
+[    0.732621] 0x000001420000-0x000001560000 : "kernel"
+[    0.738388] 0x000001560000-0x000001f20000 : "rootfs"
+[    0.744198] mtd: device 9 (rootfs) set to be root filesystem
+[    0.750122] 1 squashfs-split partitions found on MTD device rootfs
+[    0.756553] 0x000001eb0000-0x000001f20000 : "rootfs_data"
+[    0.762786] 0x000001000000-0x000001010000 : "bs1"
+[    0.768298] 0x000001010000-0x000001020000 : "bs2"
+[    0.773854] 0x000001020000-0x000001420000 : "stats"
+[    0.779539] 0x000001f20000-0x000002000000 : "reserved"
+[    0.799266] switch0: Atheros AR8327 rev. 4 switch registered on ag71xx-mdio.0
+[    0.886162] libphy: ag71xx_mdio: probed
+[    1.472315] ag71xx ag71xx.0: connected to PHY at ag71xx-mdio.0:00 [uid=004dd034, driver=Atheros AR8216/AR8236/AR8316]
+[    1.483878] eth0: Atheros AG71xx at 0xb9000000, irq 4, mode:SGMII
+[    1.491485] NET: Registered protocol family 10
+[    1.498565] NET: Registered protocol family 17
+[    1.503264] bridge: automatic filtering via arp/ip/ip6tables has been deprecated. Update your scripts to load br_netfilter if you need this.
+[    1.516403] 8021q: 802.1Q VLAN Support v1.8
+[    1.529545] VFS: Mounted root (squashfs filesystem) readonly on device 31:9.
+[    1.538482] Freeing unused kernel memory: 296K (80416000 - 80460000)
+[    2.555996] Calling /sbin/tomoyo-init to load policy. Please wait.
+13 domains. 17 A[    2.682939] TOMOYO: 2.5.0
+CL entries.
+30 [    2.686450] Mandatory Access Control activated.
+KB used by policy.
+[    3.167974] init: Console is alive
+[    3.171800] init: - watchdog -
+[    5.385413] kmodloader: loading kernel modules from /etc/modules-boot.d/*
+[    5.456920] usbcore: registered new interface driver usbfs
+[    5.462703] usbcore: registered new interface driver hub
+[    5.468270] usbcore: registered new device driver usb
+[    5.478121] ehci_hcd: USB 2.0 'Enhanced' Host Controller (EHCI) Driver
+[    5.486234] ehci-platform: EHCI generic platform driver
+[    5.491754] ehci-platform ehci-platform.0: EHCI Host Controller
+[    5.497895] ehci-platform ehci-platform.0: new USB bus registered, assigned bus number 1
+[    5.508343] ehci-platform ehci-platform.0: irq 48, io mem 0x1b000000
+[    5.530887] ehci-platform ehci-platform.0: USB 2.0 started, EHCI 1.00
+[    5.538255] hub 1-0:1.0: USB hub found
+[    5.542445] hub 1-0:1.0: 1 port detected
+[    5.546805] ehci-platform ehci-platform.1: EHCI Host Controller
+[    5.552990] ehci-platform ehci-platform.1: new USB bus registered, assigned bus number 2
+[    5.563449] ehci-platform ehci-platform.1: irq 49, io mem 0x1b400000
+[    5.580877] ehci-platform ehci-platform.1: USB 2.0 started, EHCI 1.00
+[    5.588232] hub 2-0:1.0: USB hub found
+[    5.592457] hub 2-0:1.0: 1 port detected
+[    5.599132] ohci_hcd: USB 1.1 'Open' Host Controller (OHCI) Driver
+[    5.606798] ohci-platform: OHCI generic platform driver
+[    5.612899] kmodloader: done loading kernel modules from /etc/modules-boot.d/*
+[    5.630784] init: - preinit -
+[    6.105897] usb 2-1: new full-speed USB device number 2 using ehci-platform
+[    6.113165] usb 1-1: new high-speed USB device number 2 using ehci-platform
+[    6.318010] IPv6: ADDRCONF(NETDEV_UP): eth0: link is not ready
+[    6.333889] random: procd urandom read with 11 bits of entropy available
+[    6.341250] hub 1-1:1.0: USB hub found
+[    6.348728] hub 1-1:1.0: 4 ports detected
+Press the [f] key and hit [enter] to enter failsafe mode
+Press the [1], [2], [3] or [4] key and hit [enter] to select the debug level
+[    6.640872] usb 1-1.2: new full-speed USB device number 3 using ehci-platform
+[    7.632271] eth0: link up (1000Mbps/Full duplex)
+[    7.637161] IPv6: ADDRCONF(NETDEV_CHANGE): eth0: link becomes ready
+[    9.584968] Active configuration in slot 2
+[    9.835075] Atheros AR8216/AR8236/AR8316 ag71xx-mdio.0:00: Port 1 is up
+[    9.841957] Atheros AR8216/AR8236/AR8316 ag71xx-mdio.0:00: hotplug event (PORT=1, ACTION=up)
+[    9.850954] Atheros AR8216/AR8236/AR8316 ag71xx-mdio.0:00: Port 2 is up
+[    9.857791] Atheros AR8216/AR8236/AR8316 ag71xx-mdio.0:00: hotplug event (PORT=2, ACTION=up)
+[   10.360591] Configuration: extracting...
+[   10.929994] Configuration: files ready
+[   10.952864] eth0: link down
+Section 'misc' h[   11.187844] procd: - early -
+as not been writ[   11.191255] procd: - watchdog -
+ten
+[   11.856186] procd: - watchdog -
+[   11.859758] procd: - ubus -
+[   11.944089] procd: - init -
+Please press Enter to activate this console.
+[   13.520362] kmodloader: loading kernel modules from /etc/modules.d/*
+[   13.528954] ubnthal: module license 'Proprietary' taints kernel.
+[   13.535209] Disabling lock debugging due to kernel taint
+[   13.555921] ubnthal: Ubiquiti AmpliFi Router HD
+[   13.560610] ubnthal: Dragonfly: maxPower 24 powerOffset 0 txmask 7 antenna 4 [0] gain 4 caps 0x4014
+[   13.569999] ubnthal: Peregrine: maxPower 24 powerOffset 0 txmask 7 antenna 4 [0] gain 4 caps 0x4024
+[   13.606799] Loading AmpliFi LED module (board ID: EA36, board rev: 19)
+[   13.881796] tun: Universal TUN/TAP device driver, 1.6
+[   13.887015] tun: (C) 1999-2004 Max Krasnyansky <maxk@qualcomm.com>
+[   13.912726] sit: IPv6 over IPv4 tunneling driver
+[   13.933525] gre: GRE over IPv4 demultiplexor driver
+[   13.993849] ip_gre: GRE over IPv4 tunneling driver
+[   14.003008] ip6_gre: GRE over IPv6 tunneling driver
+[   14.013043] ip6_tables: (C) 2000-2006 Netfilter Core Team
+[   14.206523] nf_conntrack version 0.5.0 (1959 buckets, 7836 max)
+[   16.758326] u32 classifier
+[   16.761184]     input device check on
+[   16.764964]     Actions configured
+[   16.903887] Mirror/redirect action on
+[   17.177139] Bluetooth: Core ver 2.20
+[   17.180966] NET: Registered protocol family 31
+[   17.185571] Bluetooth: HCI device and connection manager initialized
+[   17.192156] Bluetooth: HCI socket layer initialized
+[   17.197193] Bluetooth: L2CAP socket layer initialized
+[   17.202443] Bluetooth: SCO socket layer initialized
+[   17.211417] cdc_acm 1-1.2:1.0: ttyACM0: USB ACM device
+[   17.217528] usbcore: registered new interface driver cdc_acm
+[   17.223453] cdc_acm: USB Abstract Control Model driver for USB modems and ISDN adapters
+[   17.235798] Loading modules backported from Linux version wt-2017-11-01-0-gfe248fc2c180
+[   17.244111] Backport generated by backports.git v4.14-rc2-1-31-g86cf0e5d
+[   17.258176] cyttsp5_loader_init: Parade TTSP FW Loader Driver (Built TTDA.03.08.874312) rc=0
+[   17.268981] ip_tables: (C) 2000-2006 Netfilter Core Team
+[   17.284625] upnp: nf_conntrack_upnp_init(161)
+[   17.366838] Netfilter messages via NETLINK v0.30.
+[   17.386901] wireguard: WireGuard 0.0.20190601 loaded. See www.wireguard.com for information.
+[   17.395678] wireguard: Copyright (C) 2015-2019 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
+[   17.441326] xt_time: kernel timezone is -0000
+[   17.447891] usbcore: registered new interface driver ath3k
+[   17.566690] usb 2-1: USB disconnect, device number 2
+[   17.600485] Bluetooth: LE_ADV_REFRESH quirk is set
+[   17.606084] usbcore: registered new interface driver btusb
+[   17.733925] ctnetlink v0.93: registering with nfnetlink.
+[   17.751114] PPP generic driver version 2.4.2
+[   17.757899] NET: Registered protocol family 24
+[   17.786725] PCI: Enabling device 0000:00:00.0 (0000 -> 0002)
+[   17.792770] ath10k_pci 0000:00:00.0: pci irq legacy oper_irq_mode 1 irq_mode 0 reset_mode 0
+[   17.930873] usb 2-1: new full-speed USB device number 3 using ehci-platform
+[   18.014901] ath10k_pci 0000:00:00.0: Direct firmware load for ath10k/pre-cal-pci-0000:00:00.0.bin failed with error -2
+[   18.025976] ath10k_pci 0000:00:00.0: Falling back to user helper
+[   18.086578] firmware ath10k!pre-cal-pci-0000:00:00.0.bin: firmware_loading_store: map pages failed
+[   18.096177] ath10k_pci 0000:00:00.0: Direct firmware load for ath10k/cal-pci-0000:00:00.0.bin failed with error -2
+[   18.106919] ath10k_pci 0000:00:00.0: Falling back to user helper
+[   18.296761] ath10k_pci 0000:00:00.0: Direct firmware load for ath10k/QCA988X/hw2.0/firmware-6.bin failed with error -2
+[   18.307862] ath10k_pci 0000:00:00.0: Falling back to user helper
+[   18.478332] firmware ath10k!QCA988X!hw2.0!firmware-6.bin: firmware_loading_store: map pages failed
+[   18.883639] ath10k_pci 0000:00:00.0: qca988x hw2.0 target 0x4100016c chip_id 0x043202ff sub 0000:0000
+[   18.893219] ath10k_pci 0000:00:00.0: kconfig debug 0 debugfs 1 tracing 0 dfs 0 testmode 1
+[   18.906281] ath10k_pci 0000:00:00.0: firmware ver 10.2.4-1.0-00043 api 5 features no-p2p,raw-mode,mfp,allows-mesh-bcast crc32 d4ee6d35
+[   18.951441] ath10k_pci 0000:00:00.0: Direct firmware load for ath10k/QCA988X/hw2.0/board-2.bin failed with error -2
+[   18.962238] ath10k_pci 0000:00:00.0: Falling back to user helper
+[   19.023215] firmware ath10k!QCA988X!hw2.0!board-2.bin: firmware_loading_store: map pages failed
+[   19.032695] ath10k_pci 0000:00:00.0: board_file api 1 bmi_id N/A crc32 bebc7c08
+[   20.134692] ath10k_pci 0000:00:00.0: htt-ver 2.1 wmi-op 5 htt-op 2 cal file max-sta 128 raw 0 hwcrypto 1
+[   20.393090] ieee80211 phy1: Atheros AR9561 Rev:0 mem=0xb8100000, irq=47
+[   20.451407] kmodloader: done loading kernel modules from /etc/modules.d/*
+[   23.201371] Bluetooth: LE_ADV_REFRESH quirk is set
+[   26.442313] ar8327_hnat_en: remove CPU port tx header
+[   26.447800] ar8327_hnat_en: deregistering eth_mangle_rx function
+[   34.079296] Service tinc is disabled
+[   35.046075] Service qos is disabled
+[   40.234419] IPv6: ADDRCONF(NETDEV_UP): eth0: link is not ready
+[   40.268683] device eth0 entered promiscuous mode
+[   40.281760] device eth0.1 entered promiscuous mode
+[   40.315904] IPv6: ADDRCONF(NETDEV_UP): br-lan: link is not ready
+[   41.180706] IPv6: ADDRCONF(NETDEV_UP): eth0.2: link is not ready
+[   41.236482] IPv6: ADDRCONF(NETDEV_UP): br-guest: link is not ready
+[   42.179912] Service cwmpd is disabled
+[   42.564973] Service easycwmpd is disabled
+[   42.636972] eth0: link up (1000Mbps/Full duplex)
+[   42.888573] IPv6: ADDRCONF(NETDEV_CHANGE): eth0: link becomes ready
+[   44.193783] br-lan: port 1(eth0.1) entered forwarding state
+[   44.199589] br-lan: port 1(eth0.1) entered forwarding state
+[   44.205541] IPv6: ADDRCONF(NETDEV_CHANGE): eth0.2: link becomes ready
+[   45.251016] IPv6: ADDRCONF(NETDEV_CHANGE): br-lan: link becomes ready
+[   48.715124] nf_conntrack: automatic helper assignment is deprecated and it will be removed soon. Use the iptables CT target to attach helpers instead.
+[   51.586525] IPv6: ADDRCONF(NETDEV_UP): wlan1: link is not ready
+[   51.644058] device wlan1 entered promiscuous mode
+[   51.648983] br-lan: port 2(wlan1) entered forwarding state
+[   51.654712] br-lan: port 2(wlan1) entered forwarding state
+[   54.200905] br-lan: port 1(eth0.1) entered forwarding state
+[   54.988751] IPv6: ADDRCONF(NETDEV_UP): wlan0: link is not ready
+[   54.996927] br-lan: port 2(wlan1) entered disabled state
+[   55.066160] device wlan0 entered promiscuous mode
+[   57.649114] random: nonblocking pool is initialized
+[   60.608407] device wlan1-1 entered promiscuous mode
+[   60.662226] IPv6: ADDRCONF(NETDEV_UP): wlan1-1: link is not ready
+[   60.668634] br-lan: port 4(wlan1-1) entered forwarding state
+[   60.674561] br-lan: port 4(wlan1-1) entered forwarding state
+[   60.685802] IPv6: ADDRCONF(NETDEV_CHANGE): wlan1: link becomes ready
+[   60.692632] br-lan: port 2(wlan1) entered forwarding state
+[   60.698356] br-lan: port 2(wlan1) entered forwarding state
+[   60.780943] br-lan: port 4(wlan1-1) entered disabled state
+[   61.322442] device wlan0-1 entered promiscuous mode
+[   61.352195] IPv6: ADDRCONF(NETDEV_UP): wlan0-1: link is not ready
+[   61.358518] br-lan: port 5(wlan0-1) entered forwarding state
+[   61.364473] br-lan: port 5(wlan0-1) entered forwarding state
+[   61.650938] IPv6: ADDRCONF(NETDEV_CHANGE): wlan0: link becomes ready
+[   61.657648] br-lan: port 3(wlan0) entered forwarding state
+[   61.663416] br-lan: port 3(wlan0) entered forwarding state
+[   61.781097] br-lan: port 5(wlan0-1) entered disabled state
+[   62.910104] IPv6: ADDRCONF(NETDEV_CHANGE): wlan1-1: link becomes ready
+[   62.917110] br-lan: port 4(wlan1-1) entered forwarding state
+[   62.923043] br-lan: port 4(wlan1-1) entered forwarding state
+[   62.960342] device wlan1-2 entered promiscuous mode
+[   63.002896] IPv6: ADDRCONF(NETDEV_UP): wlan1-2: link is not ready
+[   63.009215] br-guest: port 1(wlan1-2) entered forwarding state
+[   63.015320] br-guest: port 1(wlan1-2) entered forwarding state
+[   63.033940] IPv6: ADDRCONF(NETDEV_CHANGE): br-guest: link becomes ready
+[   63.236093] device wlan1-3 entered promiscuous mode
+[   63.291294] IPv6: ADDRCONF(NETDEV_UP): wlan1-3: link is not ready
+[   63.297642] br-lan: port 6(wlan1-3) entered forwarding state
+[   63.303556] br-lan: port 6(wlan1-3) entered forwarding state
+[   63.831473] IPv6: ADDRCONF(NETDEV_CHANGE): wlan0-1: link becomes ready
+[   63.838472] br-lan: port 5(wlan0-1) entered forwarding state
+[   63.844442] br-lan: port 5(wlan0-1) entered forwarding state
+[   63.997550] device wlan0-2 entered promiscuous mode
+[   64.003726] br-guest: port 1(wlan1-2) entered disabled state
+[   64.042425] br-lan: port 6(wlan1-3) entered disabled state
+[   64.092430] IPv6: ADDRCONF(NETDEV_UP): wlan0-2: link is not ready
+[   64.099065] br-guest: port 2(wlan0-2) entered forwarding state
+[   64.105227] br-guest: port 2(wlan0-2) entered forwarding state
+[   64.234926] IPv6: ADDRCONF(NETDEV_CHANGE): wlan0-2: link becomes ready
+[   64.277803] device wlan0-3 entered promiscuous mode
+[   64.335313] IPv6: ADDRCONF(NETDEV_UP): wlan0-3: link is not ready
+[   64.341688] br-lan: port 7(wlan0-3) entered forwarding state
+[   64.347593] br-lan: port 7(wlan0-3) entered forwarding state
+[   65.001965] br-lan: port 7(wlan0-3) entered disabled state
+[   65.472176] device wlan1-4 entered promiscuous mode
+[   65.498325] IPv6: ADDRCONF(NETDEV_UP): wlan1-4: link is not ready
+[   65.504715] br-lan: port 8(wlan1-4) entered forwarding state
+[   65.510599] br-lan: port 8(wlan1-4) entered forwarding state
+[   66.000958] br-lan: port 8(wlan1-4) entered disabled state
+[   66.280850] IPv6: ADDRCONF(NETDEV_CHANGE): wlan0-3: link becomes ready
+[   66.287916] br-lan: port 7(wlan0-3) entered forwarding state
+[   66.293872] br-lan: port 7(wlan0-3) entered forwarding state
+[   66.407125] device wlan0-4 entered promiscuous mode
+[   66.458443] IPv6: ADDRCONF(NETDEV_UP): wlan0-4: link is not ready
+[   66.464998] br-lan: port 9(wlan0-4) entered forwarding state
+[   66.470934] br-lan: port 9(wlan0-4) entered forwarding state
+[   67.001047] br-lan: port 9(wlan0-4) entered disabled state
+[   67.672399] ar8327_hnat_en: remove CPU port tx header
+[   67.677911] ar8327_hnat_en: deregistering eth_mangle_rx function
+[   68.391332] IPv6: ADDRCONF(NETDEV_CHANGE): wlan0-4: link becomes ready
+[   68.398321] br-lan: port 9(wlan0-4) entered forwarding state
+[   68.404278] br-lan: port 9(wlan0-4) entered forwarding state
+[   70.720941] br-lan: port 2(wlan1) entered forwarding state
+[   71.680953] br-lan: port 3(wlan0) entered forwarding state
+[   72.940946] br-lan: port 4(wlan1-1) entered forwarding state
+[   73.860954] br-lan: port 5(wlan0-1) entered forwarding state
+[   74.120956] br-guest: port 2(wlan0-2) entered forwarding state
+[   76.321046] br-lan: port 7(wlan0-3) entered forwarding state
+[   78.420947] br-lan: port 9(wlan0-4) entered forwarding state
+
+
+
+BusyBox v1.24.1 () built-in shell (ash)
+
+
+                                           _  _  ______  _
+                  /\     Router           | |(_)|  ____|(_)
+                 /  \    _ __ ___   _ __  | | _ | |__    _
+                / /\ \  | '_ ` _ \ | '_ \ | || ||  __|  | |
+               / ____ \ | | | | | || |_) || || || |     | |
+              /_/    \_\|_| |_| |_|| .__/ |_||_||_|     |_|
+                                   | |
+              Dirty Diamond 3.1.2  |_|   0-g5de4b81633
+
+ubnt@AFi-R-HD-02E148:/# mount
+/dev/root on / type squashfs (ro,relatime)
+proc on /proc type proc (rw,nosuid,nodev,noexec,noatime)
+sysfs on /sys type sysfs (rw,nosuid,nodev,noexec,noatime)
+tmpfs on /tmp type tmpfs (rw,nosuid,nodev,noatime)
+tmpfs on /dev type tmpfs (rw,nosuid,relatime,size=512k,mode=755)
+devpts on /dev/pts type devpts (rw,nosuid,noexec,relatime,mode=600)
+debugfs on /sys/kernel/debug type debugfs (rw,noatime)
+ubnt@AFi-R-HD-02E148:/# cat /proc/mtd
+dev:    size   erasesize  name
+mtd0: 00060000 00010000 "u-boot"
+mtd1: 00010000 00010000 "u-boot-env"
+mtd2: 00010000 00010000 "prst"
+mtd3: 00010000 00010000 "eeprom"
+mtd4: 000c0000 00010000 "cfg"
+mtd5: 003b0000 00010000 "recovery"
+mtd6: 00b00000 00010000 "fw_inactive"
+mtd7: 00b00000 00010000 "firmware"
+mtd8: 00140000 00010000 "kernel"
+mtd9: 009c0000 00010000 "rootfs"
+mtd10: 00070000 00010000 "rootfs_data"
+mtd11: 00010000 00010000 "bs1"
+mtd12: 00010000 00010000 "bs2"
+mtd13: 00400000 00010000 "stats"
+mtd14: 000e0000 00010000 "reserved"
+ubnt@AFi-R-HD-02E148:/# ps ww
+  PID USER       VSZ STAT COMMAND
+    1 ubnt      1556 S    /sbin/procd
+    2 ubnt         0 SW   [kthreadd]
+    3 ubnt         0 SW   [ksoftirqd/0]
+    4 ubnt         0 SW   [kworker/0:0]
+    5 ubnt         0 SW<  [kworker/0:0H]
+    6 ubnt         0 SW   [kworker/u2:0]
+    7 ubnt         0 SW<  [khelper]
+    8 ubnt         0 SW   [kworker/u2:1]
+   69 ubnt         0 SW<  [writeback]
+   71 ubnt         0 SW<  [crypto]
+   72 ubnt         0 SW<  [bioset]
+   74 ubnt         0 SW<  [kblockd]
+  108 ubnt         0 SW   [kswapd0]
+  109 ubnt         0 SW   [kworker/0:1]
+  157 ubnt         0 SW   [fsnotify_mark]
+  178 ubnt         0 SW   [spi0]
+  338 ubnt         0 SW<  [ipv6_addrconf]
+  344 ubnt         0 SW<  [deferwq]
+  347 ubnt         0 SW<  [kworker/0:1H]
+  382 ubnt         0 SW   [kworker/0:2]
+  383 ubnt         0 SW   [kworker/0:3]
+  560 ubnt      1228 S    /sbin/ubusd
+  561 ubnt      1204 S    /bin/ash --login
+  783 ubnt      5420 S    /sbin/rpcd
+ 1269 ubnt         0 SW<  [cfg80211]
+ 1287 ubnt         0 SW<  [ath10k_wq]
+ 1288 ubnt         0 SW<  [ath10k_aux_wq]
+ 1290 ubnt         0 SW   [kworker/u2:2]
+ 1554 ubnt      2200 S    /sbin/logd -S 1024
+ 1576 ubnt      5048 S    /usr/bin/uictld -f
+ 1580 ubnt         0 SW<  [kworker/u3:0]
+ 1582 ubnt         0 SW<  [hci0]
+ 1583 ubnt         0 SW<  [hci0]
+ 1586 ubnt         0 SW<  [kworker/u3:1]
+ 1587 ubnt         0 SW<  [kworker/u3:2]
+ 1732 ubnt      1736 S    /sbin/netifd
+ 1785 ubnt      1440 S    /usr/sbin/odhcpd -l 6
+ 1911 ubnt      1300 S    /usr/sbin/uhttpd -f -h /www/html -r AFi-R-HD-02E148 -x /cgi-bin -t 180 -T 150 -k 20 -A 1 -n 3 -N 100 -D -R -p 0.0.0.0:80 -p [::]:80 -i .php=/bin/sh -I index.php
+ 1923 ubnt      1392 S    /usr/sbin/dbus-daemon --system
+ 1939 ubnt      4192 S    /usr/sbin/fwupdated -f
+ 1997 ubnt     13744 S <  /usr/sbin/ajconfd
+ 2023 ubnt      2380 S    /usr/sbin/bluetoothd -dnE -p skip_all_plugins
+ 2047 ubnt     11544 S    /usr/bin/bleprotod
+ 2481 ubnt      1200 S    udhcpc -p /var/run/udhcpc-eth0.2.pid -s /lib/netifd/dhcp.script -f -t 0 -i eth0.2 -x hostname AFi-R-HD-02E148 -C -O 121
+ 2917 ubnt      1600 S    /usr/sbin/miniupnpd -D -f /var/etc/miniupnpd.conf
+ 3132 ubnt       952 S    /usr/sbin/igmpproxy -n /var/etc/igmpproxy.conf
+ 3182 ubnt      1200 S    zcip -f -v -r 169.254.225.72 br-lan /lib/netifd/zcip.script
+ 3213 ubnt      3132 S    /usr/bin/perfd -f
+ 3696 ubnt      1200 S    /usr/sbin/ntpd -n -S /usr/sbin/ntpd-hotplug -p 0.ubnt.pool.ntp.org -p 1.ubnt.pool.ntp.org -p 2.ubnt.pool.ntp.org -p 3.ubnt.pool.ntp.org
+ 3841 ubnt      1860 S    /usr/sbin/hostapd -P /var/run/wifi-phy1.pid -B /var/run/hostapd-phy1.conf
+ 3902 ubnt      1752 S    /usr/sbin/hostapd -P /var/run/wifi-phy0.pid -B /var/run/hostapd-phy0.conf
+ 4471 dnsmasq   1320 S    /usr/sbin/dnsmasq -C /var/etc/dnsmasq.conf.cfg01411c -k -x /var/run/dnsmasq/dnsmasq.cfg01411c.pid
+ 4602 ubnt      1200 R    ps ww
