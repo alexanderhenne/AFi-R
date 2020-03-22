@@ -89,7 +89,7 @@ Where ``{VERSION}`` can be found in the information section of the router's mobi
 
 ![](https://user-images.githubusercontent.com/8920674/68997769-3bdca580-08aa-11ea-9678-ced33e6b4539.jpg)
 
-For example, the version might be ``3.1.2.0-g5de4b81633``.
+For example, the version might be ``3.3.0.0-g3035af3f69``.
 
 ## Flashing firmware
 
@@ -117,7 +117,7 @@ Open Ghidra or IDA and search for "Bad firmware signature". Patch the local vari
 
 ![](https://user-images.githubusercontent.com/8920674/68997659-2ca92800-08a9-11ea-839f-35be49d6d969.png)
 
-\*The pattern above has only been tested on 2.0.0, 2.1.1, 2.6.1 and 3.2.1. It might work on other and future versions too, but I cannot guarantee that it does.
+\*The pattern above has only been tested on 2.0.0, 2.1.1, 2.6.1, 3.1.2 and 3.3.0. It might work on other and future versions too, but I cannot guarantee that it does.
 
 ## Making custom firmware
 
