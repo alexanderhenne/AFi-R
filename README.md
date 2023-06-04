@@ -81,15 +81,9 @@ This is the pinout for J11 as seen from above:
 
 ## Firmware download
 
-All versions of the router's firmware are available for download at:
-
-``http://riga.corp.ubnt.com/file/stable/AFi-R.qca956x.v{VERSION}.bin``
-
-Where ``{VERSION}`` can be found in the information section of the router's mobile application:
-
-![](https://user-images.githubusercontent.com/8920674/68997769-3bdca580-08aa-11ea-9678-ced33e6b4539.jpg)
-
-For example, the version might be ``3.3.0.0-g3035af3f69``.
+You can find the firmware link for the latest version either by:
+* Visiting Ubiquiti's forum, for example https://community.ui.com/releases/AmpliFi-Firmware-HD-and-Instant-4-0-0/b18104b6-554a-490b-8243-ad72ec066a49
+* or visiting https://www.ubnt.com/update/amplifi/check/?c=stable&t=AFi-R&v=3.4.3
 
 ## Flashing firmware
 
