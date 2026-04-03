@@ -19,7 +19,7 @@ if [ ! -f $SQUASHFS_FILE ]; then
 fi
 
 # analyze squashfs file
-SQUASHFS_FILE_BINWALK=$( binwalk $SQUASHFS_FILE | grep "Squashfs filesystem" )
+SQUASHFS_FILE_BINWALK=$( binwalk $SQUASHFS_FILE | grep -iE "squashfs file\s*system" )
 
 # make sure squashfs file contains 1 squashfs filesystem
 if [ $( echo "$SQUASHFS_FILE_BINWALK" | wc -l ) != 1 ]; then
@@ -28,7 +28,7 @@ if [ $( echo "$SQUASHFS_FILE_BINWALK" | wc -l ) != 1 ]; then
 fi
 
 # make sure squashfs header says the filesize is the same as the wc filesize
-SQUASHFS_FILE_BINWALK_SIZE=$( echo "$SQUASHFS_FILE_BINWALK" | grep -oP ' size: \K\w+' )
+SQUASHFS_FILE_BINWALK_SIZE=$( echo "$SQUASHFS_FILE_BINWALK" | grep -oP ' (?<!block )(?<!block)size: \K\w+' )
 SQUASHFS_FILE_WC_SIZE=$( wc -c < $SQUASHFS_FILE )
 
 if [ "$SQUASHFS_FILE_BINWALK_SIZE" != "$SQUASHFS_FILE_WC_SIZE" ]; then
@@ -37,7 +37,7 @@ if [ "$SQUASHFS_FILE_BINWALK_SIZE" != "$SQUASHFS_FILE_WC_SIZE" ]; then
 fi
 
 # make sure blocksize is 262144 bytes
-SQUASHFS_FILE_BINWALK_BLOCKSIZE=$( echo "$SQUASHFS_FILE_BINWALK" | grep -oP ' blocksize: \K\w+' )
+SQUASHFS_FILE_BINWALK_BLOCKSIZE=$( echo "$SQUASHFS_FILE_BINWALK" | grep -oP ' block\s*size: \K\w+' )
 
 if [ "$SQUASHFS_FILE_BINWALK_BLOCKSIZE" != "262144" ]; then
 	echo "squashfs_file ($SQUASHFS_FILE) has wrong blocksize (real: $SQUASHFS_FILE_BINWALK_BLOCKSIZE, expected: 262144)"
@@ -45,7 +45,7 @@ if [ "$SQUASHFS_FILE_BINWALK_BLOCKSIZE" != "262144" ]; then
 fi
 
 # make sure compression algorithm used is xz
-SQUASHFS_FILE_BINWALK_COMPRESSION=$( echo "$SQUASHFS_FILE_BINWALK" | grep -oP ' compression:\K\w+' )
+SQUASHFS_FILE_BINWALK_COMPRESSION=$( echo "$SQUASHFS_FILE_BINWALK" | grep -oP ' compression:\s*\K\w+' )
 
 if [ "$SQUASHFS_FILE_BINWALK_COMPRESSION" != "xz" ]; then
 	echo "squashfs_file ($SQUASHFS_FILE) is compressed with the wrong algorithm (real: $SQUASHFS_FILE_BINWALK_COMPRESSION, expected: xz)"
@@ -54,7 +54,7 @@ fi
 
 # analyze output (input) firmware before manipulating
 VANILLA_FIRMWARE_BINWALK=$( binwalk $VANILLA_FIRMWARE )
-VANILLA_FIRMWARE_BINWALK_SQUASHFS=$( echo "$VANILLA_FIRMWARE_BINWALK" | grep "Squashfs filesystem" )
+VANILLA_FIRMWARE_BINWALK_SQUASHFS=$( echo "$VANILLA_FIRMWARE_BINWALK" | grep -iE "squashfs file\s*system" )
 
 # make sure vanilla firmware contains 1 squashfs filesystem
 if [ $( echo "$VANILLA_FIRMWARE_BINWALK_SQUASHFS" | wc -l ) != 1 ]; then
@@ -64,7 +64,7 @@ fi
 
 # remove current squashfs filesystem in output firmware and replace with squashfs_file contents
 VANILLA_FIRMWARE_BINWALK_OFFSET=$( echo "$VANILLA_FIRMWARE_BINWALK_SQUASHFS" | grep -oP "^\d+" )
-VANILLA_FIRMWARE_BINWALK_SIZE=$( echo "$VANILLA_FIRMWARE_BINWALK_SQUASHFS" | grep -oP ' size: \K\w+' )
+VANILLA_FIRMWARE_BINWALK_SIZE=$( echo "$VANILLA_FIRMWARE_BINWALK_SQUASHFS" | grep -oP ' (?<!block )(?<!block)size: \K\w+' )
 
 OUTPUT_FIRMWARE_TEMP=$OUTPUT_FIRMWARE.tmp
 
