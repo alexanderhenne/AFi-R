@@ -19,7 +19,7 @@ Do **NOT** connect VCC to your UART reader. It's recommended to connect GND to t
 |J8              |`unk 0.0V, unk 0.0V, unk 3.3V, unconnected`|         |Not analyzed                        |
 |J9              |`unk 3.3V, unk 0.0V, unk 3.3V, unk 0.0V`   |         |Not analyzed                        |
 |J10             |`unk 0.0V, unk 3.3V, unk 3.3V, unk 3.3V`   |         |Not analyzed                        |
-|J11             |`VCC 3.3v, RX, TX, GND`                    |115200   |Main SoC's serial console           |
+|J11             |`GND, RX, TX, VCC 3.3V`                    |115200   |Main SoC's serial console           |
 |J29             |`unk 3.3V, unk 0.0V, unk 0.0V, unk 0.0V`   |         |Not analyzed                        |
 
 ### J11
@@ -28,7 +28,7 @@ The UART header labeled J11 can be used for administrative communication with th
 
 The router uses a simple BusyBox `/bin/ash` shell without authentication.
 
-![](https://user-images.githubusercontent.com/8920674/68997684-6c700f80-08a9-11ea-98ab-6a9e3cfed29a.png)
+![](images/j11-serial.png)
 
 A dump from J11's boot procedure and a run of the `mount` command can be found [here](../bootlog.txt).
 
@@ -40,19 +40,19 @@ The J11 header is on the bottom right corner of the middle board.
 
 From above, J11 is obstructed by a rubber piece stuck to the top board:
 
-![](https://user-images.githubusercontent.com/8920674/68997613-b4dafd80-08a8-11ea-8eb3-523892fe579c.jpg)
+![](images/j11-top.jpg)
 
 But the header is also exposed from the underside:
 
-![](https://user-images.githubusercontent.com/8920674/68997615-b5739400-08a8-11ea-82f2-1f02065e2e97.jpg)
+![](images/j11-bottom.jpg)
 
 Pinout for J11 as seen from above:
 
-![](https://user-images.githubusercontent.com/8920674/68997614-b4dafd80-08a8-11ea-9df5-b916123fcf30.jpg)
+![](images/j11-pinout.jpg)
 
 ## Enabling developer mode (SSH access)
 
-![](https://user-images.githubusercontent.com/8920674/69831516-0df04d00-122a-11ea-9cc6-adc8fa356cc7.png)
+![](images/developer-mode.png)
 
 Developer mode enables the Dropbear SSH server and other features.
 
@@ -95,11 +95,11 @@ You can find the firmware link for the latest version either by:
 
 Flashing a firmware file on-demand can be done at `http://amplifi.lan/fwupdate.php`.
 
-![](https://user-images.githubusercontent.com/8920674/68997725-c1138a80-08a9-11ea-88f7-cddb5ba9315e.png)
+![](images/fwupdate.png)
 
 The web server runs `uh-fw-tool` to verify the firmware. This tool rejects firmware that is invalid, unsigned, or not signed by the manufacturer.
 
-![](https://user-images.githubusercontent.com/8920674/68997739-e30d0d00-08a9-11ea-985a-a7d4eb992ddb.png)
+![](images/fwupdate-error.png)
 
 ### Custom firmware
 
@@ -113,7 +113,7 @@ Patch it to return 0 instead of 0xa when the signature is "bad":
 2. Patch the local variable assignment from `0xa` to `0x0`
 3. Alternatively, search for the hex pattern `9A A0 6A 0A 10 06 B2 0C`* and replace `0A` with `00`
 
-![](https://user-images.githubusercontent.com/8920674/68997659-2ca92800-08a9-11ea-839f-35be49d6d969.png)
+![](images/uh-fw-tool-patch.png)
 
 \*Tested on firmware versions 2.0.0, 2.1.1, 2.6.1, 3.1.2, and 3.3.0.
 
@@ -121,7 +121,7 @@ Patch it to return 0 instead of 0xa when the signature is "bad":
 
 Tools for extracting, modifying, and repacking firmware are available in [tools/](../tools/).
 
-![](https://user-images.githubusercontent.com/8920674/68997841-36338f80-08ab-11ea-86b4-5c8de9cddd03.png)
+![](images/custom-firmware-tools.png)
 
 #### Flashing custom firmware
 

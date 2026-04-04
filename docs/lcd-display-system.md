@@ -31,7 +31,7 @@ The AFi-R has a **physically separate LCD display board** connected to the main 
 
 ### Display Board Photo
 
-![Display board](display-board.jpg)
+![Display board](images/display-board.jpg)
 
 ### Display Board Connectors
 
