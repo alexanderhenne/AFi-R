@@ -41,7 +41,7 @@ The AFi-R has a **physically separate LCD display board** connected to the main 
 | **SWD** | 6-pin SWD debug/programming header (pin 1 marked with rectangle = VCC 3.3V) |
 | **J7** | 2-pin **BOOT0 jumper** — short both pads to enter STM32 ROM DFU bootloader |
 | **LCM** | FFC connector to LCD panel (bottom right, FSMC 8080 parallel) |
-| **J2** | Touch panel / I2C connector (top right) |
+| **J2** | Touch panel / I2C connector (top right) — Parade S1222 via I2C1 (PB6/PB7) |
 | **J4** | Additional connector (right side) |
 | **J8** | Speaker connector (DAC CH2 via amplifier) |
 | **J28** (on router mainboard) | 6-pin header carrying USB signals + power to the display board. Can be hot-plugged while router is on. |
@@ -608,22 +608,58 @@ The display module includes a speaker driven by the STM32's DAC peripheral.
 
 ### Touchscreen
 
-The display module includes a Cypress TrueTouch Gen5 capacitive touchscreen.
+The display module includes a Parade/Cypress TrueTouch Gen4 capacitive touchscreen (not Gen5 as the kernel module name suggests).
 
 **Hardware:**
-- **Controller**: cyttsp5 connected via I2C to the STM32
-- **Firmware**: `lib/firmware/cyttsp5_fw.bin` (58 KB)
+
+| Pin | Function | Configuration |
+|-----|----------|--------------|
+| **PB6** | I2C1_SCL | AF4, open-drain, no pull-up (external pull-ups on board) |
+| **PB7** | I2C1_SDA | AF4, open-drain, no pull-up |
+| **PB8** | Touch reset (XRES) | Push-pull output, active LOW: assert 20ms, release, wait 500ms |
+| **PB9** | Touch interrupt (INT) | Input with pull-up, active LOW = data ready |
+
+- **Controller**: Parade TrueTouch Gen4, silicon ID **S1222**, protocol **DS4 R4.0.0**
+- **I2C address**: 0x20 (7-bit, app mode), 0x08 (bootloader mode)
+- **I2C clock**: 100 kHz standard mode (APB1=30MHz, CCR=150, TRISE=31)
+- **Firmware**: `lib/firmware/cyttsp5_fw.bin` (59,204 bytes) — also embedded pre-processed in the MCU flash at offset 0xC56E4. The firmware is configured by Ubiquiti to map the touch sensor grid to 240x240 display pixel coordinates.
 - **Host-side kernel modules**: `cyttsp5.ko`, `cyttsp5_i2c.ko`, `cyttsp5_loader.ko`
+- **Dual-driver architecture**: stock firmware probes for FocalTech FT3308 (0x38) first, then Parade S1222 (0x20/0x08)
+
+**I2C protocol (app mode):**
+- Stock firmware uses `HAL_I2C_Mem_Write`/`HAL_I2C_Mem_Read` (polling, not interrupt/DMA)
+- Touch data register is dynamically discovered at boot via descriptor scan (pages 0-4, registers 0xE9 down by 6 to 0x05, type byte 0x11)
+- Read 6 bytes from the discovered page+register using page-select protocol
+- Touch record format (6 bytes):
+
+  | Byte | Content |
+  |------|---------|
+  | 0 | Touch flags (bit 0 = tip switch: 1=touching, 0=lifted) |
+  | 1 | Touch ID |
+  | 2 | X high byte |
+  | 3 | Y high byte |
+  | 4 | X low nibble `[3:0]`, Y low nibble `[7:4]` (packed) |
+  | 5 | Pressure |
+
+- Coordinate extraction: `X = (buf[2] << 4) | (buf[4] & 0x0F)`, `Y = (buf[3] << 4) | (buf[4] >> 4)` — packed as 12-bit fields, values map to display pixels (0-239 x 0-239, origin at top-left)
+- I2C bus recovery (GPIO SCL toggle 9x + STOP) required at init — peripheral SWRST alone cannot clear a stuck bus
+
+**I2C protocol (bootloader mode):**
+- Page-select: write page (0x20) to register 0xFF before each access
+- Firmware upload in 16-byte blocks via register 0x02, with notifications via register 0x12
+- Bootloader reports block counts via register 0x10
+- See stock firmware functions at offsets 0x0FF68 (hid_i2c_read), 0x0FFD0 (hid_i2c_write), 0x10BC4 (upload)
+
+**Embedded touch firmware (in MCU flash):**
+- Location: offset 0xC56E4, 256-byte header + Section 1 (0xB000 bytes, 2816 blocks) + Section 2 (80 bytes, 5 blocks)
+- Header contains: silicon ID "S1222", protocol "DS4 R4.0.0", section offsets, I2C descriptor
+- Section 1: application firmware code (encrypted/obfuscated)
+- Section 2: configuration/calibration data, first bytes `11 52 00 02` (expected version response)
 
 **Stock firmware behavior:**
 - Touch events are processed by the MCU firmware directly
 - The MCU reports touch events to the host: `[info:] TouchPanel: Ready, Status: 0x%X, ID: %s, Ver: %02X%02X%02X%02X`
 - Touch is used for screen navigation (swipe between info screens) and button presses (WPS, update confirm/dismiss)
-
-**Implementation notes for custom firmware:**
-- I2C peripheral on STM32F205 needs to be configured for the cyttsp5 address
-- The cyttsp5 protocol is documented in Cypress/Infineon application notes
-- Touch events could be forwarded over USB CDC as coordinate data
 
 ---
 

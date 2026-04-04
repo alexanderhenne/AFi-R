@@ -306,9 +306,8 @@ static void lcd_set_window(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 
 static void backlight_init(void)
 {
-    /* Enable clocks: DAC, TIM4, GPIOA, GPIOB, GPIOC */
-    RCC->APB1ENR |= (1 << 29)   /* DACEN */
-                  | (1 << 2);    /* TIM4EN */
+    /* Enable clocks: DAC, GPIOA, GPIOB, GPIOC */
+    RCC->APB1ENR |= (1 << 29);  /* DACEN */
     RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN
                   | RCC_AHB1ENR_GPIOBEN
                   | RCC_AHB1ENR_GPIOCEN;
@@ -321,27 +320,10 @@ static void backlight_init(void)
     DAC_DHR12R1 = 4095;  /* Max brightness ch1 */
     *(volatile uint32_t *)(DAC_BASE + 0x14) = 4095;  /* Max brightness ch2 */
 
-    /* --- TIM4 PWM on PB6/PB7/PB8/PB9 (CH1-CH4) --- */
-    /* Configure PB6-PB9 as AF2 (TIM4) */
-    for (int pin = 6; pin <= 9; pin++) {
-        gpio_set_af(GPIOB, pin, 2);  /* AF2 = TIM4 */
-    }
-    /* TIM4: PWM mode 1, max duty cycle, ~1kHz at 120MHz/4=30MHz APB1 timer */
-    #define TIM4_BASE 0x40000800UL
-    volatile uint32_t *TIM4 = (volatile uint32_t *)TIM4_BASE;
-    TIM4[0x00/4] = 0;        /* CR1: disabled */
-    TIM4[0x2C/4] = 29999;    /* ARR: period */
-    TIM4[0x18/4] = 0x6868;   /* CCMR1: PWM mode 1 on CH1 and CH2 */
-    TIM4[0x1C/4] = 0x6868;   /* CCMR2: PWM mode 1 on CH3 and CH4 */
-    TIM4[0x20/4] = 0x1111;   /* CCER: enable all 4 channels */
-    TIM4[0x34/4] = 29999;    /* CCR1: max duty */
-    TIM4[0x38/4] = 29999;    /* CCR2: max duty */
-    TIM4[0x3C/4] = 29999;    /* CCR3: max duty */
-    TIM4[0x40/4] = 29999;    /* CCR4: max duty */
-    TIM4[0x00/4] = 1;        /* CR1: enable */
+    /* PB6-PB9 are reserved for I2C1 (touchscreen) — NOT used for backlight.
+     * Stock firmware confirms: PB6=SCL, PB7=SDA, PB8=touch reset, PB9=touch IRQ. */
 
-    /* --- Also try GPIO brute force on common backlight pins --- */
-    /* Set PB0, PB1, PB10, PB11, PC6, PC7 as output high */
+    /* GPIO brute force on remaining backlight candidate pins */
     uint16_t pb_pins[] = {0, 1, 10, 11};
     for (int i = 0; i < 4; i++) {
         int p = pb_pins[i];
@@ -819,6 +801,420 @@ static const AudioStep preset_sweep[] = {
 };
 
 /* ======================================================================
+ * Touchscreen -- Cypress/Parade CYTTSP4 or FocalTech FT3308 via I2C1
+ *
+ * PB6 = I2C1_SCL, PB7 = I2C1_SDA (AF4, open-drain)
+ * PB8 = touch reset (XRES, active LOW)
+ * PB9 = touch interrupt (INT, falling edge)
+ * ====================================================================== */
+
+#define TOUCH_NONE   0
+#define TOUCH_FT3308 1
+#define TOUCH_PARADE 2
+static uint8_t touch_type;
+static uint8_t touch_addr;    /* 7-bit I2C address */
+static uint8_t tp_touch_page; /* page for touch data register */
+static uint8_t tp_touch_reg;  /* register for touch data */
+
+/* --- I2C1 polling driver --- */
+
+static void i2c_init(void)
+{
+    RCC->APB1ENR |= (1 << 21);  /* I2C1EN */
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;
+    __DSB();
+
+    /* Bus recovery: release SDA if slave is holding it low.
+     * Toggle SCL 9 times as GPIO, then generate STOP condition. */
+    for (int pin = 6; pin <= 7; pin++) {
+        GPIOB->MODER  = (GPIOB->MODER & ~(3UL << (pin*2))) | (1UL << (pin*2));
+        GPIOB->OTYPER |= (1UL << pin);
+        GPIOB->OSPEEDR |= (3UL << (pin*2));
+        GPIOB->PUPDR  &= ~(3UL << (pin*2));
+    }
+    GPIOB->BSRR = (1 << 6) | (1 << 7);
+    delay_ms(1);
+    for (int i = 0; i < 9; i++) {
+        GPIOB->BSRR = (1 << (6 + 16));
+        for (volatile int d = 0; d < 120; d++) {}
+        GPIOB->BSRR = (1 << 6);
+        for (volatile int d = 0; d < 120; d++) {}
+    }
+    GPIOB->BSRR = (1 << (7 + 16));  /* SDA LOW */
+    for (volatile int d = 0; d < 120; d++) {}
+    GPIOB->BSRR = (1 << 6);          /* SCL HIGH */
+    for (volatile int d = 0; d < 120; d++) {}
+    GPIOB->BSRR = (1 << 7);          /* SDA HIGH = STOP */
+    delay_ms(1);
+
+    /* PB6 = SCL, PB7 = SDA: AF4, open-drain, no pull (matches stock fw) */
+    for (int pin = 6; pin <= 7; pin++) {
+        GPIOB->MODER = (GPIOB->MODER & ~(3UL << (pin*2))) | (2UL << (pin*2));
+        uint8_t pos = (pin & 7) * 4;
+        GPIOB->AFR[0] = (GPIOB->AFR[0] & ~(0xFUL << pos)) | (GPIO_AF4_I2C << pos);
+    }
+
+    /* Reset and configure I2C1 */
+    I2C1->CR1 = I2C_CR1_SWRST;
+    I2C1->CR1 = 0;
+    I2C1->CR2 = 30;
+    I2C1->CCR = 150;
+    I2C1->TRISE = 31;
+    I2C1->OAR1 = 0;
+    I2C1->CR1 = I2C_CR1_PE;
+}
+
+static int i2c_wait(volatile uint32_t *reg, uint32_t flag, uint32_t timeout_ms)
+{
+    uint32_t start = systick_ms;
+    while (!(*reg & flag)) {
+        if ((systick_ms - start) > timeout_ms) return -1;
+    }
+    return 0;
+}
+
+static int i2c_wait_not(volatile uint32_t *reg, uint32_t flag, uint32_t timeout_ms)
+{
+    uint32_t start = systick_ms;
+    while (*reg & flag) {
+        if ((systick_ms - start) > timeout_ms) return -1;
+    }
+    return 0;
+}
+
+static int tp_safe_read(uint8_t addr, uint8_t *buf, uint32_t len, uint32_t tmo);
+
+/* HAL_I2C_Mem_Write equivalent: START → addr+W → memAddr → data... → STOP
+ * Matches stock firmware register-level sequence exactly. */
+static int i2c_mem_write(uint8_t addr, uint8_t memAddr, const uint8_t *data, uint32_t len)
+{
+    /* Wait for bus idle */
+    if (i2c_wait_not(&I2C1->SR2, (1 << 1), 100)) return -1;  /* BUSY */
+
+    I2C1->CR1 |= I2C_CR1_START;
+    if (i2c_wait(&I2C1->SR1, I2C_SR1_SB, 100)) goto fail;
+
+    I2C1->DR = (addr << 1);  /* addr + W */
+    if (i2c_wait(&I2C1->SR1, I2C_SR1_ADDR, 100)) goto fail;
+    if (I2C1->SR1 & I2C_SR1_AF) goto fail;
+
+    /* Clear ADDR with interrupts disabled (timing-critical) */
+    __asm volatile ("cpsid i" ::: "memory");
+    (void)I2C1->SR1;
+    (void)I2C1->SR2;
+    __asm volatile ("cpsie i" ::: "memory");
+
+    /* Send register address */
+    if (i2c_wait(&I2C1->SR1, I2C_SR1_TXE, 100)) goto fail;
+    I2C1->DR = memAddr;
+
+    /* Send data bytes */
+    for (uint32_t i = 0; i < len; i++) {
+        if (i2c_wait(&I2C1->SR1, I2C_SR1_TXE, 100)) goto fail;
+        I2C1->DR = data[i];
+    }
+
+    /* Wait for last byte to finish */
+    if (i2c_wait(&I2C1->SR1, I2C_SR1_BTF, 100)) goto fail;
+    I2C1->CR1 |= I2C_CR1_STOP;
+
+    return 0;
+
+fail:
+    I2C1->SR1 &= ~I2C_SR1_AF;
+    I2C1->CR1 |= I2C_CR1_STOP;
+    return -1;
+}
+
+/* HAL_I2C_Mem_Read equivalent: START → addr+W → memAddr → RESTART → addr+R → data... → STOP */
+static int i2c_mem_read(uint8_t addr, uint8_t memAddr, uint8_t *data, uint32_t len)
+{
+    if (len == 0) return 0;
+    if (i2c_wait_not(&I2C1->SR2, (1 << 1), 100)) return -1;
+
+    /* Write phase: send register address */
+    I2C1->CR1 |= I2C_CR1_START;
+    if (i2c_wait(&I2C1->SR1, I2C_SR1_SB, 100)) goto fail;
+    I2C1->DR = (addr << 1);
+    if (i2c_wait(&I2C1->SR1, I2C_SR1_ADDR, 100)) goto fail;
+    if (I2C1->SR1 & I2C_SR1_AF) goto fail;
+
+    __asm volatile ("cpsid i" ::: "memory");
+    (void)I2C1->SR1;
+    (void)I2C1->SR2;
+    __asm volatile ("cpsie i" ::: "memory");
+
+    if (i2c_wait(&I2C1->SR1, I2C_SR1_TXE, 100)) goto fail;
+    I2C1->DR = memAddr;
+    if (i2c_wait(&I2C1->SR1, I2C_SR1_BTF, 100)) goto fail;
+
+    /* Read phase */
+    return tp_safe_read(addr, data, len, 500);
+
+fail:
+    I2C1->SR1 &= ~I2C_SR1_AF;
+    I2C1->CR1 |= I2C_CR1_STOP;
+    return -1;
+}
+
+/* Legacy wrapper for existing callers */
+static int i2c_write_read(uint8_t addr, const uint8_t *wr, uint32_t wr_len,
+                           uint8_t *rd, uint32_t rd_len)
+{
+    if (wr_len == 1 && rd_len > 0)
+        return i2c_mem_read(addr, wr[0], rd, rd_len);
+    if (wr_len > 0 && rd_len == 0)
+        return i2c_mem_write(addr, wr[0], wr + 1, wr_len - 1);
+    if (wr_len == 0 && rd_len > 0)
+        return tp_safe_read(addr, rd, rd_len, 500);
+    return -1;
+}
+
+static int i2c_read_reg(uint8_t addr, uint8_t reg, uint8_t *buf, uint32_t len)
+{
+    return i2c_mem_read(addr, reg, buf, len);
+}
+
+/* Errata-safe I2C read for N bytes (handles N=1, N=2 POS/BTF, and N>2) */
+static int tp_safe_read(uint8_t addr, uint8_t *buf, uint32_t len, uint32_t tmo)
+{
+    if (len == 0) return 0;
+    I2C1->SR1 &= ~I2C_SR1_AF;
+    I2C1->CR1 &= ~I2C_CR1_POS;
+    I2C1->CR1 |= I2C_CR1_ACK | I2C_CR1_START;
+    if (i2c_wait(&I2C1->SR1, I2C_SR1_SB, tmo)) goto fail;
+    I2C1->DR = (addr << 1) | 1;
+    if (i2c_wait(&I2C1->SR1, I2C_SR1_ADDR, tmo)) goto fail;
+
+    if (len == 1) {
+        I2C1->CR1 &= ~I2C_CR1_ACK;
+        (void)I2C1->SR2;
+        I2C1->CR1 |= I2C_CR1_STOP;
+        if (i2c_wait(&I2C1->SR1, I2C_SR1_RXNE, tmo)) goto fail;
+        buf[0] = (uint8_t)I2C1->DR;
+    } else if (len == 2) {
+        I2C1->CR1 &= ~I2C_CR1_ACK;
+        I2C1->CR1 |= I2C_CR1_POS;
+        (void)I2C1->SR2;
+        if (i2c_wait(&I2C1->SR1, I2C_SR1_BTF, tmo)) goto fail;
+        I2C1->CR1 |= I2C_CR1_STOP;
+        buf[0] = (uint8_t)I2C1->DR;
+        buf[1] = (uint8_t)I2C1->DR;
+    } else {
+        (void)I2C1->SR2;
+        for (uint32_t i = 0; i < len; i++) {
+            if (i == len - 3) {
+                /* Wait for BTF (byte N-2 in DR, N-1 in shift reg) */
+                if (i2c_wait(&I2C1->SR1, I2C_SR1_BTF, tmo)) goto fail;
+                I2C1->CR1 &= ~I2C_CR1_ACK;
+                buf[i] = (uint8_t)I2C1->DR;  /* byte N-3 */
+                i++;
+                I2C1->CR1 |= I2C_CR1_STOP;
+                buf[i] = (uint8_t)I2C1->DR;  /* byte N-2 */
+                i++;
+                if (i2c_wait(&I2C1->SR1, I2C_SR1_RXNE, tmo)) goto fail;
+                buf[i] = (uint8_t)I2C1->DR;  /* byte N-1 (last) */
+                break;
+            }
+            if (i2c_wait(&I2C1->SR1, I2C_SR1_RXNE, tmo)) goto fail;
+            buf[i] = (uint8_t)I2C1->DR;
+        }
+    }
+    I2C1->CR1 &= ~I2C_CR1_POS;
+    return 0;
+
+fail:
+    I2C1->CR1 &= ~(I2C_CR1_ACK | I2C_CR1_POS);
+    I2C1->CR1 |= I2C_CR1_STOP;
+    I2C1->SR1 &= ~I2C_SR1_AF;
+    return -1;
+}
+
+/* Probe: check if address ACKs, then reset I2C to clear any error state */
+static int i2c_probe(uint8_t addr)
+{
+    I2C1->SR1 &= ~I2C_SR1_AF;
+    I2C1->CR1 |= I2C_CR1_START;
+    if (i2c_wait(&I2C1->SR1, I2C_SR1_SB, 5)) { I2C1->CR1 |= I2C_CR1_STOP; return -1; }
+    I2C1->DR = (addr << 1);
+    uint32_t t0 = systick_ms;
+    while (!(I2C1->SR1 & (I2C_SR1_ADDR | I2C_SR1_AF))) {
+        if ((systick_ms - t0) > 5) break;
+    }
+    int ok = (I2C1->SR1 & I2C_SR1_ADDR) ? 0 : -1;
+    if (ok == 0) (void)I2C1->SR2;
+    I2C1->SR1 &= ~I2C_SR1_AF;
+    I2C1->CR1 |= I2C_CR1_STOP;
+    delay_ms(1);
+
+    I2C1->CR1 = I2C_CR1_SWRST;
+    I2C1->CR1 = 0;
+    I2C1->CR2 = 30;
+    I2C1->CCR = 150;
+    I2C1->TRISE = 31;
+    I2C1->CR1 = I2C_CR1_PE;
+    return ok;
+}
+
+/* --- Touch controller --- */
+
+static void touch_reset(void)
+{
+    GPIOB->MODER = (GPIOB->MODER & ~(3UL << (8*2))) | (1UL << (8*2));
+    GPIOB->OTYPER &= ~(1UL << 8);
+    GPIOB->BSRR = (1 << (8 + 16));  /* PB8 LOW */
+    delay_ms(20);
+    GPIOB->BSRR = (1 << 8);         /* PB8 HIGH */
+    delay_ms(500);
+}
+
+/* Page-select I2C helpers: set page register (0xFF) before each access */
+static int tp_page_write(uint8_t addr, uint8_t page, uint8_t reg,
+                          const uint8_t *data, uint32_t len)
+{
+    if (i2c_mem_write(addr, 0xFF, &page, 1) != 0) return -1;
+    return i2c_mem_write(addr, reg, data, len);
+}
+
+static int tp_page_read(uint8_t addr, uint8_t page, uint8_t reg,
+                         uint8_t *data, uint32_t len)
+{
+    if (i2c_mem_write(addr, 0xFF, &page, 1) != 0) return -1;
+    return i2c_mem_read(addr, reg, data, len);
+}
+
+/* Scan descriptor entries to find the touch data register.
+ * Stock firmware scans pages 0-4, registers 0xE9 down by 6 to 0x05,
+ * reading 6-byte entries. Type 0x11 = touch data descriptor.
+ * Saves the page + register address for subsequent touch reads. */
+static int tp_discover_touch_reg(uint8_t addr)
+{
+    for (uint8_t page = 0; page <= 4; page++) {
+        for (int reg = 0xE9; reg >= 0x05; reg -= 6) {
+            uint8_t desc[6];
+            if (tp_page_read(addr, page, (uint8_t)reg, desc, 6) != 0)
+                continue;
+            if (desc[5] == 0x11) {
+                tp_touch_page = page;
+                tp_touch_reg = desc[3];
+                return 0;
+            }
+        }
+    }
+    return -1;
+}
+
+static void touch_init(void)
+{
+    touch_type = TOUCH_NONE;
+    i2c_init();
+    touch_reset();
+
+    /* PB9 = touch INT: input with pull-up */
+    GPIOB->MODER &= ~(3UL << (9*2));
+    GPIOB->PUPDR = (GPIOB->PUPDR & ~(3UL << (9*2))) | (1UL << (9*2));
+
+    /* Try app mode first (firmware already loaded) */
+    for (int attempt = 0; attempt < 10; attempt++) {
+        if (i2c_probe(0x20) == 0) {
+            touch_type = TOUCH_PARADE;
+            touch_addr = 0x20;
+            /* Scan descriptors to find the touch data register */
+            tp_discover_touch_reg(0x20);
+            return;
+        }
+        delay_ms(50);
+    }
+
+    /* Try bootloader mode (detect only — no automatic firmware upload) */
+    for (int attempt = 0; attempt < 10; attempt++) {
+        if (i2c_probe(0x08) == 0) {
+            touch_type = TOUCH_PARADE;
+            touch_addr = 0x08;  /* Bootloader mode — limited functionality */
+            return;
+        }
+        delay_ms(50);
+    }
+
+    /* Try FocalTech FT3308 */
+    if (i2c_probe(0x38) == 0) {
+        touch_type = TOUCH_FT3308;
+        touch_addr = 0x38;
+    }
+}
+
+/* Format and send a touch event: "tp <x>,<y>,<event>\r\n" */
+static void touch_send_event(uint16_t x, uint16_t y, const char *ev_str)
+{
+    char out[32];
+    int pos = 0;
+    out[pos++] = 't'; out[pos++] = 'p'; out[pos++] = ' ';
+    { uint16_t v = x; char d[5]; int n = 0;
+      if (v == 0) d[n++] = '0';
+      else while (v > 0) { d[n++] = '0' + v % 10; v /= 10; }
+      while (n > 0) out[pos++] = d[--n];
+    }
+    out[pos++] = ',';
+    { uint16_t v = y; char d[5]; int n = 0;
+      if (v == 0) d[n++] = '0';
+      else while (v > 0) { d[n++] = '0' + v % 10; v /= 10; }
+      while (n > 0) out[pos++] = d[--n];
+    }
+    out[pos++] = ',';
+    for (const char *s = ev_str; *s; s++) out[pos++] = *s;
+    out[pos++] = '\r'; out[pos++] = '\n'; out[pos] = 0;
+    cdc_send_str(out);
+}
+
+static uint32_t touch_backoff_until;  /* don't poll until this systick_ms */
+static uint8_t  touch_was_down;       /* previous touch state for up/move */
+
+static void touch_poll(void)
+{
+    if (touch_type == TOUCH_NONE) return;
+    if (GPIOB->IDR & (1 << 9)) return;  /* INT HIGH = no data */
+    if ((int32_t)(systick_ms - touch_backoff_until) < 0) return;
+
+    if (touch_type == TOUCH_FT3308) {
+        uint8_t buf[7];
+        if (i2c_read_reg(touch_addr, 0x02, buf, 7) != 0) {
+            touch_backoff_until = systick_ms + 500;
+            return;
+        }
+        uint8_t n_points = buf[0] & 0x0F;
+        if (n_points == 0 || n_points > 2) return;
+        uint8_t event = (buf[1] >> 6) & 0x03;
+        uint16_t x = ((buf[1] & 0x0F) << 8) | buf[2];
+        uint16_t y = ((buf[3] & 0x0F) << 8) | buf[4];
+        const char *ev = (event == 0) ? "down" : (event == 1) ? "up" : "move";
+        touch_send_event(x, y, ev);
+    }
+    else if (touch_type == TOUCH_PARADE) {
+        /* Parade: read 6-byte touch record from discovered register.
+         * Format: [0]=flags, [1]=id, [2]=Xhi, [3]=Yhi, [4]=XYlo, [5]=pressure
+         * X = (buf[2]<<4) | (buf[4] & 0x0F),  12-bit 0-4095
+         * Y = (buf[3]<<4) | (buf[4]>>4),       12-bit 0-4095 */
+        uint8_t buf[6];
+        if (tp_page_read(touch_addr, tp_touch_page, tp_touch_reg, buf, 6) != 0) {
+            touch_backoff_until = systick_ms + 500;
+            return;
+        }
+        if (!(buf[0] & 0x01)) {
+            if (touch_was_down) {
+                touch_send_event(0, 0, "up");
+                touch_was_down = 0;
+            }
+            return;
+        }
+        uint16_t x = ((uint16_t)buf[2] << 4) | (buf[4] & 0x0F);
+        uint16_t y = ((uint16_t)buf[3] << 4) | ((buf[4] >> 4) & 0x0F);
+        const char *ev = touch_was_down ? "move" : "down";
+        touch_send_event(x, y, ev);
+        touch_was_down = 1;
+    }
+}
+
+/* ======================================================================
  * Main
  * ====================================================================== */
 
@@ -839,6 +1235,9 @@ int main(void)
     /* Init audio subsystem (TIM6 + DMA, not started until a tone plays) */
     audio_init();
 
+    /* Init touchscreen (I2C1, probes for Parade or FT3308 controller) */
+    touch_init();
+
     /* Fill screen black — two byte writes per pixel */
     lcd_set_window(0, 0, 240, 240);
     for (int i = 0; i < 240 * 240; i++) {
@@ -854,6 +1253,8 @@ int main(void)
 
         /* Advance audio sequencer (check step durations) */
         audio_update();
+
+        touch_poll();
 
         /* PCM streaming mode: bulk-read USB data into ring buffer */
         if (audio_streaming) {
@@ -955,6 +1356,9 @@ int main(void)
                     cdc_send_str("[info:] audiotest\r\n");
                     cdc_send_str("[info:] volume\r\n");
                     cdc_send_str("[info:] pcmstream\r\n");
+                    cdc_send_str("[info:] tpstatus\r\n");
+                    cdc_send_str("[info:] tpread\r\n");
+                    cdc_send_str("[info:] i2cscan\r\n");
                 }
                 else if (str_eq(cmd_buf, "storedfwhash")) {
                     cdc_send_str("[info:] 00000000000000000000000000000000\r\n");
@@ -1158,6 +1562,107 @@ int main(void)
                         /* Update amplitude for streaming (tone steps recalculate on next start) */
                         audio_amplitude = (uint16_t)(vol * 256 / 100);
                         cdc_send_str("ok\r\n");
+                    }
+                }
+                /* ---- Touch diagnostic commands ---- */
+                else if (str_eq(cmd_buf, "i2cscan")) {
+                    cdc_send_str("Scanning I2C1...\r\n");
+                    int found = 0;
+                    for (uint8_t a = 1; a < 0x78; a++) {
+                        I2C1->SR1 &= ~I2C_SR1_AF;
+                        I2C1->CR1 |= I2C_CR1_START;
+                        if (i2c_wait(&I2C1->SR1, I2C_SR1_SB, 2)) {
+                            I2C1->CR1 |= I2C_CR1_STOP; continue;
+                        }
+                        I2C1->DR = (a << 1);
+                        uint32_t t0 = systick_ms;
+                        while (!(I2C1->SR1 & (I2C_SR1_ADDR | I2C_SR1_AF)))
+                            if ((systick_ms - t0) > 2) break;
+                        if (I2C1->SR1 & I2C_SR1_ADDR) {
+                            (void)I2C1->SR2;
+                            I2C1->CR1 |= I2C_CR1_STOP;
+                            char buf[8]; buf[0]='0'; buf[1]='x';
+                            buf[2]="0123456789abcdef"[(a>>4)&0xF];
+                            buf[3]="0123456789abcdef"[a&0xF];
+                            buf[4]='\r'; buf[5]='\n'; buf[6]=0;
+                            cdc_send_str(buf);
+                            found++;
+                        } else {
+                            I2C1->SR1 &= ~I2C_SR1_AF;
+                            I2C1->CR1 |= I2C_CR1_STOP;
+                        }
+                    }
+                    if (!found) cdc_send_str("no devices\r\n");
+                    cdc_send_str("done\r\n");
+                }
+                else if (str_eq(cmd_buf, "tpstatus")) {
+                    const char *name = (touch_type == TOUCH_FT3308) ? "FT3308" :
+                                       (touch_type == TOUCH_PARADE) ? "Parade" : "none";
+                    cdc_send_str("[info:] touch=");
+                    cdc_send_str(name);
+                    cdc_send_str("\r\n");
+                }
+                else if (str_eq(cmd_buf, "tpread")) {
+                    i2c_init();  /* Full bus recovery + reinit */
+
+                    cdc_send_str("INT=");
+                    cdc_send_str((GPIOB->IDR & (1 << 9)) ? "HIGH" : "LOW");
+                    cdc_send_str("\r\n");
+
+                    uint8_t addr = (touch_type != TOUCH_NONE) ? touch_addr : 0x20;
+
+                    /* Test 1: addr+W ACK check (same as probe) */
+                    cdc_send_str("W-ACK: ");
+                    if (i2c_probe(addr) == 0)
+                        cdc_send_str("yes\r\n");
+                    else
+                        cdc_send_str("no\r\n");
+
+                    /* Test 2: addr+R ACK check */
+                    cdc_send_str("R-ACK: ");
+                    {
+                        I2C1->SR1 &= ~I2C_SR1_AF;
+                        I2C1->CR1 |= I2C_CR1_START;
+                        int ok = -1;
+                        if (i2c_wait(&I2C1->SR1, I2C_SR1_SB, 5) == 0) {
+                            I2C1->DR = (addr << 1) | 1;  /* addr+R */
+                            uint32_t t0 = systick_ms;
+                            while (!(I2C1->SR1 & (I2C_SR1_ADDR | I2C_SR1_AF)))
+                                if ((systick_ms - t0) > 5) break;
+                            if (I2C1->SR1 & I2C_SR1_ADDR) {
+                                (void)I2C1->SR2;
+                                ok = 0;
+                            }
+                        }
+                        I2C1->CR1 &= ~I2C_CR1_ACK;
+                        I2C1->CR1 |= I2C_CR1_STOP;
+                        I2C1->SR1 &= ~I2C_SR1_AF;
+                        /* Drain any byte */
+                        if (ok == 0 && (I2C1->SR1 & I2C_SR1_RXNE))
+                            (void)I2C1->DR;
+                        cdc_send_str(ok == 0 ? "yes\r\n" : "no\r\n");
+                        i2c_init();  /* Recover */
+                    }
+
+                    /* Show discovered touch register */
+                    { char r[24] = "touch_reg: page=X reg=XX\r\n";
+                      r[16] = "0123456789abcdef"[tp_touch_page & 0xF];
+                      r[22] = "0123456789abcdef"[(tp_touch_reg>>4)&0xF];
+                      r[23] = "0123456789abcdef"[tp_touch_reg&0xF];
+                      cdc_send_str(r);
+                    }
+                    /* Read 6 bytes from discovered register */
+                    cdc_send_str("touch: ");
+                    { uint8_t buf[6];
+                      if (tp_page_read(addr, tp_touch_page, tp_touch_reg, buf, 6) == 0) {
+                          for (int i = 0; i < 6; i++) {
+                              char h[4];
+                              h[0]="0123456789abcdef"[(buf[i]>>4)&0xF];
+                              h[1]="0123456789abcdef"[buf[i]&0xF];
+                              h[2]=(i<5)?' ':'\r'; h[3]=(i<5)?0:'\n';
+                              cdc_send((const uint8_t*)h, (i<5)?3:4);
+                          }
+                      } else { cdc_send_str("fail\r\n"); i2c_init(); }
                     }
                 }
                 /* else: unknown command, ignore */

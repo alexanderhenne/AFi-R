@@ -7,10 +7,8 @@ Currently implemented:
 - **Stream animated GIFs** at ~1.4 fps
 - **Solid color fills** for testing
 - **Speaker/audio**: tone generation (DDS sine wave), built-in presets (tap, bell, ring, sweep), and PCM audio streaming from any music file via ffmpeg
+- **Touchscreen**: tap/drag coordinates forwarded over USB CDC (Parade S1222 via I2C1)
 - **USB CDC serial** compatible with the stock bootloader
-
-Not yet implemented (hardware is present and accessible — see [reverse engineering notes](../docs/lcd-display-system.md)):
-- **Touchscreen input** — Cypress TrueTouch Gen5 (cyttsp5) via I2C
 - **Bootloader-safe**: can always revert to the stock firmware
 
 ## Requirements
@@ -125,6 +123,21 @@ sudo python3 scripts/host/lcd_cmd.py volume 75            # Set volume (0-100)
 
 Available presets: `tap`, `tone`, `bell`, `ring`, `sweep`.
 
+### Listen for touch events
+
+```bash
+sudo python3 scripts/host/touch_listen.py
+```
+
+Prints touch events in real time:
+```
+tp 60,120,down
+tp 62,118,move
+tp 62,118,up
+```
+
+Coordinates map to display pixels (0-239 x 0-239, origin at top-left). Press Ctrl+C to stop.
+
 ### Serial commands (for scripting)
 
 The firmware accepts text commands over `/dev/ttyACM0` with `\r\n` termination:
@@ -141,6 +154,9 @@ The firmware accepts text commands over `/dev/ttyACM0` with `\r\n` termination:
 | `audiostop` | `ok` | Stop audio playback |
 | `volume=N` | `ok` | Set speaker volume (0-100, default 50) |
 | `pcmstream[=RATE]` | `ok` | Enter PCM streaming mode (s16le mono, 8-48 kHz, default 22050) |
+| `tpstatus` | `[info:] touch=...` | Touch controller type (Parade, FT3308, none) |
+| `tpread` | Hex dump | Read raw touch register and diagnostics |
+| `i2cscan` | Address list | Scan I2C1 bus for connected devices |
 | `blreboot` | Reboots into bootloader | For firmware updates |
 | `reboot` | Reboots | Simple restart |
 | `hostmsg={...}` | `{"status":"ok"}` | Stock uictld compatibility |
@@ -172,6 +188,7 @@ Send byte `0xFF` followed by exactly 115,200 bytes of RGB565 pixel data. No hand
 | **LCD** | 240x240 ILI9341V/ST7789V, FSMC 8080 parallel 16-bit bus |
 | **USB** | Full Speed (12 Mbps) CDC ACM, VID 0x0483 / PID 0x5740 |
 | **Speaker** | DAC CH2 (PA5) → amplifier (enable: PA6) → speaker (J8) |
+| **Touchscreen** | Parade S1222 (I2C1: PB6=SCL, PB7=SDA), reset PB8, INT PB9 |
 
 ### PLL Configuration
 
@@ -214,11 +231,13 @@ custom_display_fw/
 │   │   ├── push_color.py       Fill display with solid color
 │   │   ├── push_gif.py         Stream animated GIF
 │   │   ├── stream_audio.py     Stream audio file to speaker (uses ffmpeg)
+│   │   ├── touch_listen.py     Listen for touch events
 │   │   └── lcd_cmd.py          Send text command to MCU
 │   └── router/                 Scripts for running on the router via SSH (busybox/ash)
 │       ├── flash_lcd.sh        Flash firmware to MCU via bootloader serial protocol
 │       ├── push_color.sh       Fill display with solid color
 │       ├── push_raw.sh         Push raw RGB565 file (115200 bytes)
+│       ├── touch_listen.sh     Listen for touch events
 │       └── lcd_cmd.sh          Send text command to MCU
 └── README.md
 ```

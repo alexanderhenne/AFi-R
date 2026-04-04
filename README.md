@@ -25,7 +25,7 @@ Scripts for extracting, modifying, and repacking the router's SquashFS firmware 
 Full hardware and software analysis of the stock display module — MCU firmware, USB CDC protocol, LCD controller, bootloader, and more.
 
 ### [Custom display firmware](custom_display_fw/)
-Replacement STM32 firmware that lets you push arbitrary images, animated GIFs, and solid colors to the 240x240 display. Also supports speaker audio — play tones, built-in presets, or stream music files. Includes host and router scripts.
+Replacement STM32 firmware that lets you push arbitrary images, animated GIFs, and solid colors to the 240x240 display. Also supports speaker audio (tones, presets, music streaming), and touchscreen input (tap/drag coordinates over USB). Includes host and router scripts.
 
 ## Quick start
 

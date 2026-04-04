@@ -118,6 +118,38 @@ typedef struct {
 #define LCD_CMD_ADDR      ((volatile uint16_t *)0x60000000UL)
 #define LCD_DATA_ADDR     ((volatile uint16_t *)0x60020000UL)
 
+/* ---- I2C1 ---- */
+#define I2C1_BASE         (APB1_BASE + 0x5400UL)
+typedef struct {
+    volatile uint32_t CR1;    /* +0x00 */
+    volatile uint32_t CR2;    /* +0x04 */
+    volatile uint32_t OAR1;   /* +0x08 */
+    volatile uint32_t OAR2;   /* +0x0C */
+    volatile uint32_t DR;     /* +0x10 */
+    volatile uint32_t SR1;    /* +0x14 */
+    volatile uint32_t SR2;    /* +0x18 */
+    volatile uint32_t CCR;    /* +0x1C */
+    volatile uint32_t TRISE;  /* +0x20 */
+} I2C_TypeDef;
+#define I2C1              ((I2C_TypeDef *)I2C1_BASE)
+
+/* I2C CR1 bits */
+#define I2C_CR1_PE        (1 << 0)
+#define I2C_CR1_START     (1 << 8)
+#define I2C_CR1_STOP      (1 << 9)
+#define I2C_CR1_ACK       (1 << 10)
+#define I2C_CR1_POS       (1 << 11)
+#define I2C_CR1_SWRST     (1 << 15)
+/* I2C SR1 bits */
+#define I2C_SR1_SB        (1 << 0)
+#define I2C_SR1_ADDR      (1 << 1)
+#define I2C_SR1_BTF       (1 << 2)
+#define I2C_SR1_RXNE      (1 << 6)
+#define I2C_SR1_TXE       (1 << 7)
+#define I2C_SR1_AF        (1 << 10)
+
+#define GPIO_AF4_I2C      4
+
 /* ---- TIM6 (basic timer for DAC triggering) ---- */
 #define TIM6_BASE         (APB1_BASE + 0x1000UL)
 typedef struct {
