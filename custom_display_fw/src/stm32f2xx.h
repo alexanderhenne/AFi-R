@@ -118,6 +118,48 @@ typedef struct {
 #define LCD_CMD_ADDR      ((volatile uint16_t *)0x60000000UL)
 #define LCD_DATA_ADDR     ((volatile uint16_t *)0x60020000UL)
 
+/* ---- TIM6 (basic timer for DAC triggering) ---- */
+#define TIM6_BASE         (APB1_BASE + 0x1000UL)
+typedef struct {
+    volatile uint32_t CR1;    /* +0x00 */
+    volatile uint32_t CR2;    /* +0x04 */
+    uint32_t RESERVED0;       /* +0x08 */
+    volatile uint32_t DIER;   /* +0x0C */
+    volatile uint32_t SR;     /* +0x10 */
+    volatile uint32_t EGR;    /* +0x14 */
+    uint32_t RESERVED1[3];    /* +0x18..0x20 */
+    volatile uint32_t CNT;    /* +0x24 */
+    volatile uint32_t PSC;    /* +0x28 */
+    volatile uint32_t ARR;    /* +0x2C */
+} TIM_Basic_TypeDef;
+#define TIM6              ((TIM_Basic_TypeDef *)TIM6_BASE)
+
+/* ---- DMA1 ---- */
+#define DMA1_BASE         (AHB1_BASE + 0x6000UL)
+typedef struct {
+    volatile uint32_t LISR;
+    volatile uint32_t HISR;
+    volatile uint32_t LIFCR;
+    volatile uint32_t HIFCR;
+} DMA_TypeDef;
+typedef struct {
+    volatile uint32_t CR;
+    volatile uint32_t NDTR;
+    volatile uint32_t PAR;
+    volatile uint32_t M0AR;
+    volatile uint32_t M1AR;
+    volatile uint32_t FCR;
+} DMA_Stream_TypeDef;
+#define DMA1              ((DMA_TypeDef *)DMA1_BASE)
+#define DMA1_Stream6      ((DMA_Stream_TypeDef *)(DMA1_BASE + 0x10UL + 6 * 0x18UL))
+/* DMA1 Stream 6 flags in HISR/HIFCR */
+#define DMA_HISR_TCIF6    (1UL << 21)
+#define DMA_HISR_HTIF6    (1UL << 20)
+#define DMA_HISR_TEIF6    (1UL << 19)
+#define DMA_HISR_DMEIF6   (1UL << 18)
+#define DMA_HISR_FEIF6    (1UL << 16)
+#define DMA1_Stream6_IRQn 17
+
 /* ---- USB OTG FS ---- */
 #define USB_OTG_FS_BASE   0x50000000UL
 

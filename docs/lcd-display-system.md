@@ -43,6 +43,7 @@ The AFi-R has a **physically separate LCD display board** connected to the main 
 | **LCM** | FFC connector to LCD panel (bottom right, FSMC 8080 parallel) |
 | **J2** | Touch panel / I2C connector (top right) |
 | **J4** | Additional connector (right side) |
+| **J8** | Speaker connector (DAC CH2 via amplifier) |
 | **J28** (on router mainboard) | 6-pin header carrying USB signals + power to the display board. Can be hot-plugged while router is on. |
 
 ### Display Panel Details
@@ -571,9 +572,19 @@ Note: There is a vtable-based indirection for LCD drivers supporting both ILI934
 The display module includes a speaker driven by the STM32's DAC peripheral.
 
 **Hardware:**
-- **DAC**: 12-bit, dual-channel (`0x40007400`). One channel for backlight brightness, one for audio output.
-- **Sample rate**: 16 kHz (triggered by TIM6/TIM7 basic timers at `0x40001000`/`0x40001400`)
-- **Output**: DAC → amplifier → speaker (on the display board)
+
+| Pin | Function | Notes |
+|---|---|---|
+| **PA4** | DAC CH1 | Backlight brightness control |
+| **PA5** | DAC CH2 | Audio output to amplifier |
+| **PA6** | Amplifier enable | GPIO push-pull, active HIGH. **No sound without this.** |
+| **J8** | Speaker connector | On the display board |
+
+- **DAC**: 12-bit, dual-channel (`0x40007400`). CH1 = backlight (PA4), CH2 = audio (PA5).
+- **Sample rate**: 16 kHz (stock firmware uses TIM7 at `0x40001400`; TIM6 at `0x40001000` also works with TSEL2=000)
+- **DMA**: DMA1 Stream 6, Channel 7 transfers samples to DAC CH2
+- **Amplifier**: Enabled by driving PA6 HIGH. Stock firmware sets PA6 HIGH before playback and LOW after to avoid idle noise.
+- **PC6/TIM3**: Stock firmware configures PC6 as TIM3 CH1 PWM (AF2). Testing showed this does **not** control speaker volume and causes audible 10 kHz whine when driven with PWM. Its actual purpose is unknown; leaving it as GPIO HIGH (as part of backlight init) works fine.
 
 **Built-in tones** (stored as 12-bit sample arrays in flash):
 
@@ -586,7 +597,7 @@ The display module includes a speaker driven by the STM32's DAC peripheral.
 | `tap` | Touch feedback click |
 | `tone` | Simple tone |
 
-**Protocol:**
+**Stock firmware protocol:**
 - `hostmsg={"sndsys":1}` — enable/disable system sounds
 - `hostmsg={"sndtap":1}` — enable/disable tap sounds
 - `audiotest=bell` — play a tone directly (MCU serial command)
@@ -594,12 +605,6 @@ The display module includes a speaker driven by the STM32's DAC peripheral.
 - `{"volume":50}` — set volume level
 
 **UCI config:** `uictld.@uictld[0].snd_sys`, `snd_tap`, `snd_volume`
-
-**Implementation notes for custom firmware:**
-- TIM6 configured as DAC trigger at 16 kHz (ARR = SYSCLK/APB1_prescaler/16000 - 1)
-- DMA transfers sample data from flash/RAM to DAC data register
-- Need to determine which DAC channel is audio vs backlight (likely DAC_CH1=backlight on PA4, DAC_CH2=audio on PA5, but needs verification on hardware)
-- The `audiotest=` command handler is at code reference `0x0D128` in the stock firmware
 
 ### Touchscreen
 

@@ -6,10 +6,10 @@ Currently implemented:
 - **Push any image** (PNG, JPG, BMP, etc.) to the 240x240 LCD
 - **Stream animated GIFs** at ~1.4 fps
 - **Solid color fills** for testing
+- **Speaker/audio**: tone generation (DDS sine wave), built-in presets (tap, bell, ring, sweep), and PCM audio streaming from any music file via ffmpeg
 - **USB CDC serial** compatible with the stock bootloader
 
 Not yet implemented (hardware is present and accessible — see [reverse engineering notes](../docs/lcd-display-system.md)):
-- **Speaker/audio output** — STM32 DAC channel 2 (PA5), 12-bit, 16 kHz via TIM6. Stock firmware has built-in tones (bell, ring, tap, etc.)
 - **Touchscreen input** — Cypress TrueTouch Gen5 (cyttsp5) via I2C
 - **Bootloader-safe**: can always revert to the stock firmware
 
@@ -18,6 +18,7 @@ Not yet implemented (hardware is present and accessible — see [reverse enginee
 - `arm-none-eabi-gcc` (ARM bare-metal toolchain)
 - [TinyUSB](https://github.com/hathach/tinyusb) cloned to `/tmp/tinyusb`
 - Python 3 with `pyserial` and `Pillow`
+- `ffmpeg` (for audio streaming — decodes MP3, FLAC, WAV, OGG, etc.)
 - The display board connected via micro-USB
 
 ### Install dependencies
@@ -98,6 +99,32 @@ sudo python3 scripts/host/push_gif.py animation.gif 2.0     # 2x speed
 
 Press Ctrl+C to stop. The display recovers automatically on the next push.
 
+### Play audio
+
+```bash
+# Stream any audio file to the speaker
+sudo python3 scripts/host/stream_audio.py song.mp3
+
+# With options
+sudo python3 scripts/host/stream_audio.py song.flac --rate 32000 --volume 80
+
+# Pipe raw s16le PCM from stdin
+ffmpeg -i song.mp3 -f s16le -ar 22050 -ac 1 - | sudo python3 scripts/host/stream_audio.py -
+```
+
+Press Ctrl+C to stop. The speaker auto-stops after 500ms of no data.
+
+### Play tones
+
+```bash
+sudo python3 scripts/host/lcd_cmd.py audiotest bell     # Built-in preset
+sudo python3 scripts/host/lcd_cmd.py audiotest tap       # Short click
+sudo python3 scripts/host/lcd_cmd.py tone 1000 200       # 1kHz for 200ms
+sudo python3 scripts/host/lcd_cmd.py volume 75            # Set volume (0-100)
+```
+
+Available presets: `tap`, `tone`, `bell`, `ring`, `sweep`.
+
 ### Serial commands (for scripting)
 
 The firmware accepts text commands over `/dev/ttyACM0` with `\r\n` termination:
@@ -109,6 +136,11 @@ The firmware accepts text commands over `/dev/ttyACM0` with `\r\n` termination:
 | `status` | `[info:] 0x00000000` | Status |
 | `rawfb` | `ok 115200` then reads 115200 bytes | Push raw RGB565 frame |
 | `rawrow=N,HEXDATA` | — | Push single row (960 hex chars) |
+| `tone=FREQ,DUR` | `ok` | Play sine wave (1-8000 Hz, 1-10000 ms) |
+| `audiotest=NAME` | `ok` | Play preset: tap, tone, bell, ring, sweep |
+| `audiostop` | `ok` | Stop audio playback |
+| `volume=N` | `ok` | Set speaker volume (0-100, default 50) |
+| `pcmstream[=RATE]` | `ok` | Enter PCM streaming mode (s16le mono, 8-48 kHz, default 22050) |
 | `blreboot` | Reboots into bootloader | For firmware updates |
 | `reboot` | Reboots | Simple restart |
 | `hostmsg={...}` | `{"status":"ok"}` | Stock uictld compatibility |
@@ -139,6 +171,7 @@ Send byte `0xFF` followed by exactly 115,200 bytes of RGB565 pixel data. No hand
 | **Crystal** | 8.00 MHz HSE |
 | **LCD** | 240x240 ILI9341V/ST7789V, FSMC 8080 parallel 16-bit bus |
 | **USB** | Full Speed (12 Mbps) CDC ACM, VID 0x0483 / PID 0x5740 |
+| **Speaker** | DAC CH2 (PA5) → amplifier (enable: PA6) → speaker (J8) |
 
 ### PLL Configuration
 
@@ -169,7 +202,7 @@ HSE 8MHz → PLLM=8, PLLN=240, PLLP=2, PLLQ=5
 custom_display_fw/
 ├── Makefile                    Build system
 ├── src/                        Firmware source
-│   ├── main.c                  USB CDC, LCD driver, command parser, pixel streaming
+│   ├── main.c                  USB CDC, LCD driver, audio, command parser, pixel streaming
 │   ├── stm32f2xx.h             STM32F2xx register definitions
 │   ├── tusb_config.h           TinyUSB configuration
 │   ├── usb_descriptors.c       USB device/configuration/string descriptors
@@ -180,6 +213,7 @@ custom_display_fw/
 │   │   ├── push_image.py       Push any image (PNG/JPG/etc.) to the display
 │   │   ├── push_color.py       Fill display with solid color
 │   │   ├── push_gif.py         Stream animated GIF
+│   │   ├── stream_audio.py     Stream audio file to speaker (uses ffmpeg)
 │   │   └── lcd_cmd.py          Send text command to MCU
 │   └── router/                 Scripts for running on the router via SSH (busybox/ash)
 │       ├── flash_lcd.sh        Flash firmware to MCU via bootloader serial protocol

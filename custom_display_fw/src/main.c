@@ -18,6 +18,7 @@
 void Reset_Handler(void);
 void Default_Handler(void);
 void OTG_FS_IRQHandler(void);
+void DMA1_Stream6_IRQHandler(void);
 void NMI_Handler(void)        __attribute__((weak, alias("Default_Handler")));
 void HardFault_Handler(void)  __attribute__((weak, alias("Default_Handler")));
 void MemManage_Handler(void)  __attribute__((weak, alias("Default_Handler")));
@@ -51,8 +52,12 @@ void (* const vector_table[16 + 68])(void) = {
     0,                             /* Reserved */
     Default_Handler,               /* PendSV */
     SysTick_Handler,               /* SysTick */
-    /* IRQ 0..66: all default */
-    [16 + 0 ... 16 + 66] = Default_Handler,
+    /* IRQ 0..16: all default */
+    [16 + 0 ... 16 + 16] = Default_Handler,
+    /* IRQ 17: DMA1_Stream6 (audio DAC) */
+    [16 + 17] = DMA1_Stream6_IRQHandler,
+    /* IRQ 18..66: all default */
+    [16 + 18 ... 16 + 66] = Default_Handler,
     /* IRQ 67: OTG_FS */
     [16 + 67] = OTG_FS_IRQHandler,
 };
@@ -528,6 +533,292 @@ void Default_Handler(void)
 }
 
 /* ======================================================================
+ * Audio subsystem -- DAC channel 2 (PA5) via TIM6 + DMA1 Stream 6
+ *
+ * TIM6 fires at 16 kHz, triggering DAC CH2 to load the next sample
+ * from a circular DMA buffer. The DMA half-transfer and transfer-complete
+ * interrupts refill each buffer half with generated waveform data.
+ * ====================================================================== */
+
+#define AUDIO_SAMPLE_RATE  16000
+#define AUDIO_BUF_LEN      512   /* Circular DMA buffer: 2 halves of 256 */
+#define AUDIO_HALF_LEN     (AUDIO_BUF_LEN / 2)
+
+/* Phase increment per Hz: 2^32 / SAMPLE_RATE = 268435.456 ≈ 268435 */
+#define PHASE_INC_PER_HZ   268435
+
+/* 256-entry sine wave lookup table, 12-bit (0-4095), one full cycle */
+static const uint16_t sine_table[256] = {
+    2048, 2098, 2148, 2199, 2249, 2299, 2348, 2398, 2447, 2497, 2545, 2594, 2642, 2690, 2738, 2785,
+    2831, 2878, 2923, 2968, 3013, 3057, 3100, 3143, 3185, 3227, 3267, 3307, 3347, 3385, 3423, 3459,
+    3495, 3531, 3565, 3598, 3630, 3662, 3692, 3722, 3750, 3777, 3804, 3829, 3853, 3876, 3898, 3919,
+    3939, 3958, 3975, 3992, 4007, 4021, 4034, 4045, 4056, 4065, 4073, 4080, 4085, 4089, 4093, 4094,
+    4095, 4094, 4093, 4089, 4085, 4080, 4073, 4065, 4056, 4045, 4034, 4021, 4007, 3992, 3975, 3958,
+    3939, 3919, 3898, 3876, 3853, 3829, 3804, 3777, 3750, 3722, 3692, 3662, 3630, 3598, 3565, 3531,
+    3495, 3459, 3423, 3385, 3347, 3307, 3267, 3227, 3185, 3143, 3100, 3057, 3013, 2968, 2923, 2878,
+    2831, 2785, 2738, 2690, 2642, 2594, 2545, 2497, 2447, 2398, 2348, 2299, 2249, 2199, 2148, 2098,
+    2048, 1998, 1948, 1897, 1847, 1797, 1748, 1698, 1649, 1599, 1551, 1502, 1454, 1406, 1358, 1311,
+    1265, 1218, 1173, 1128, 1083, 1039,  996,  953,  911,  869,  829,  789,  749,  711,  673,  637,
+     601,  565,  531,  498,  466,  434,  404,  374,  346,  319,  292,  267,  243,  220,  198,  177,
+     157,  138,  121,  104,   89,   75,   62,   51,   40,   31,   23,   16,   11,    7,    3,    2,
+       1,    2,    3,    7,   11,   16,   23,   31,   40,   51,   62,   75,   89,  104,  121,  138,
+     157,  177,  198,  220,  243,  267,  292,  319,  346,  374,  404,  434,  466,  498,  531,  565,
+     601,  637,  673,  711,  749,  789,  829,  869,  911,  953,  996, 1039, 1083, 1128, 1173, 1218,
+    1265, 1311, 1358, 1406, 1454, 1502, 1551, 1599, 1649, 1698, 1748, 1797, 1847, 1897, 1948, 1998,
+};
+
+/* Audio DMA buffer */
+static uint16_t audio_buf[AUDIO_BUF_LEN];
+
+/* Audio state — volatile fields are shared between ISR and main loop */
+static volatile uint32_t audio_phase_inc;   /* DDS phase increment (ISR reads) */
+static volatile uint16_t audio_amplitude;   /* 0-256, 256 = full scale (ISR reads) */
+static uint32_t audio_phase;                /* DDS phase accumulator (ISR only) */
+static uint8_t  audio_playing;
+
+/* User master volume (0-100), default 50 */
+static uint8_t audio_user_volume = 50;
+
+/* Tone sequence for multi-step sounds */
+#define AUDIO_MAX_STEPS 8
+typedef struct {
+    uint16_t freq;          /* Hz (0 = silence) */
+    uint16_t duration_ms;
+    uint8_t  volume;        /* 0-100 (relative amplitude) */
+} AudioStep;
+static AudioStep audio_seq[AUDIO_MAX_STEPS];
+static uint8_t  audio_seq_len;
+static uint8_t  audio_seq_idx;
+static uint32_t audio_step_end;  /* systick_ms when current step ends */
+
+#define DAC_DHR12R2  (*(volatile uint32_t *)(DAC_BASE + 0x14))
+
+/* PCM streaming ring buffer (single-producer single-consumer, lock-free) */
+#define STREAM_BUF_SIZE  4096   /* 16-bit samples, must be power of 2 */
+#define STREAM_BUF_MASK  (STREAM_BUF_SIZE - 1)
+static uint16_t stream_buf[STREAM_BUF_SIZE];
+static volatile uint32_t stream_wr;   /* write index (main loop only) */
+static volatile uint32_t stream_rd;   /* read index (ISR only) */
+static volatile uint8_t  audio_streaming;  /* streaming mode active */
+static uint8_t  stream_started;  /* DAC/DMA started for this stream */
+static uint32_t stream_last_rx;  /* systick_ms of last received data */
+
+/* Fill half of the DMA buffer with generated samples (called from ISR) */
+static void audio_fill_half(uint16_t *buf, uint32_t count)
+{
+    /* PCM streaming: pull samples from ring buffer, apply volume */
+    if (audio_streaming) {
+        uint16_t amp = audio_amplitude;
+        for (uint32_t i = 0; i < count; i++) {
+            if (stream_rd != stream_wr) {
+                uint16_t raw = stream_buf[stream_rd & STREAM_BUF_MASK];
+                stream_rd++;
+                int32_t s = (int32_t)raw - 2048;
+                s = (s * amp) >> 8;
+                buf[i] = (uint16_t)(s + 2048);
+            } else {
+                buf[i] = 2048;  /* underrun: DAC midpoint = silence */
+            }
+        }
+        return;
+    }
+
+    /* Tone generation: DDS sine wave */
+    uint32_t phase = audio_phase;
+    uint32_t inc = audio_phase_inc;
+    uint16_t amp = audio_amplitude;
+
+    for (uint32_t i = 0; i < count; i++) {
+        uint8_t idx = (uint8_t)(phase >> 24);
+        int32_t s = (int32_t)sine_table[idx] - 2048;
+        s = (s * amp) >> 8;
+        buf[i] = (uint16_t)(s + 2048);
+        phase += inc;
+    }
+    audio_phase = phase;
+}
+
+void DMA1_Stream6_IRQHandler(void)
+{
+    uint32_t hisr = DMA1->HISR;
+
+    if (hisr & DMA_HISR_HTIF6) {
+        DMA1->HIFCR = DMA_HISR_HTIF6;
+        audio_fill_half(&audio_buf[0], AUDIO_HALF_LEN);
+    }
+    if (hisr & DMA_HISR_TCIF6) {
+        DMA1->HIFCR = DMA_HISR_TCIF6;
+        audio_fill_half(&audio_buf[AUDIO_HALF_LEN], AUDIO_HALF_LEN);
+    }
+}
+
+static void audio_init(void)
+{
+    /* Enable clocks: DMA1 (AHB1 bit 21), TIM6 (APB1 bit 4) */
+    RCC->AHB1ENR |= (1 << 21);
+    RCC->APB1ENR |= (1 << 4);
+    __DSB();
+
+    /* TIM6: 16 kHz trigger for DAC
+     * Timer clock = APB1 * 2 = 60 MHz (APB1 prescaler /4 → timers get 2x)
+     * ARR = 60000000 / 16000 - 1 = 3749 */
+    TIM6->CR1 = 0;
+    TIM6->PSC = 0;
+    TIM6->ARR = 3749;
+    TIM6->CR2 = (2 << 4);  /* MMS=010: Update event → TRGO */
+    TIM6->EGR = 1;         /* UG: force load of PSC/ARR shadow registers */
+    TIM6->SR  = 0;
+
+    /* Set DAC CH2 to midpoint (silence without voltage jump on amp enable) */
+    DAC_DHR12R2 = 2048;
+
+    /* PA6: speaker amplifier enable (push-pull output, start disabled) */
+    GPIOA->MODER = (GPIOA->MODER & ~(3UL << (6*2))) | (1UL << (6*2));
+    GPIOA->OTYPER &= ~(1UL << 6);
+    GPIOA->PUPDR  &= ~(3UL << (6*2));
+    GPIOA->BSRR = (1 << (6 + 16));  /* PA6 LOW = amp off */
+
+    /* Enable DMA1_Stream6 interrupt in NVIC */
+    NVIC_EnableIRQ(DMA1_Stream6_IRQn);
+}
+
+static void audio_start_hw(void)
+{
+    /* DAC is already at midpoint (2048) from init/stop.
+     * Enable amp now while output is silent — no voltage jump, no pop. */
+    GPIOA->BSRR = (1 << 6);  /* PA6 HIGH = amp on */
+    delay_ms(2);              /* Let amp settle on midpoint */
+
+    /* Pre-fill the entire buffer */
+    audio_phase = 0;
+    audio_fill_half(&audio_buf[0], AUDIO_HALF_LEN);
+    audio_fill_half(&audio_buf[AUDIO_HALF_LEN], AUDIO_HALF_LEN);
+
+    /* Disable DMA stream before reconfiguration */
+    DMA1_Stream6->CR = 0;
+    while (DMA1_Stream6->CR & 1) {}
+
+    /* Clear all Stream 6 interrupt flags */
+    DMA1->HIFCR = DMA_HISR_TCIF6 | DMA_HISR_HTIF6 | DMA_HISR_TEIF6
+                | DMA_HISR_DMEIF6 | DMA_HISR_FEIF6;
+
+    /* Configure DMA1 Stream 6, Channel 7 → DAC CH2 (DHR12R2) */
+    DMA1_Stream6->PAR  = DAC_BASE + 0x14;        /* DAC_DHR12R2 address */
+    DMA1_Stream6->M0AR = (uint32_t)audio_buf;
+    DMA1_Stream6->NDTR = AUDIO_BUF_LEN;
+    DMA1_Stream6->FCR  = 0;                       /* Direct mode (no FIFO) */
+    DMA1_Stream6->CR   = (7 << 25)   /* CHSEL = 7 (DAC2) */
+                       | (1 << 13)   /* MSIZE = 16-bit */
+                       | (1 << 11)   /* PSIZE = 16-bit */
+                       | (1 << 10)   /* MINC  = memory increment */
+                       | (1 << 8)    /* CIRC  = circular mode */
+                       | (1 << 6)    /* DIR   = memory-to-peripheral */
+                       | (1 << 4)    /* TCIE  = transfer complete IRQ */
+                       | (1 << 3);   /* HTIE  = half transfer IRQ */
+
+    /* Enable DMA stream */
+    DMA1_Stream6->CR |= 1;
+
+    /* Configure DAC: CH1 = software trigger (backlight), CH2 = TIM6 + DMA */
+    DAC_CR = (1 << 0)    /* EN1: keep channel 1 enabled */
+           | (1 << 16)   /* EN2: enable channel 2 */
+           | (1 << 18)   /* TEN2: trigger enable */
+           | (0 << 19)   /* TSEL2=000: TIM6 TRGO */
+           | (1 << 28);  /* DMAEN2: DMA enable */
+
+    /* Start TIM6 — audio begins playing */
+    TIM6->CR1 = 1;
+
+    audio_playing = 1;
+}
+
+static void audio_stop(void)
+{
+    if (!audio_playing) return;
+
+    TIM6->CR1 = 0;          /* Stop timer */
+    DMA1_Stream6->CR = 0;   /* Disable DMA */
+
+    /* Restore DAC to midpoint before disabling amp (minimize stop pop) */
+    DAC_CR = (1 << 0) | (1 << 16);
+    DAC_DHR12R2 = 2048;     /* Midpoint = silence */
+    delay_ms(2);
+
+    /* Disable speaker amplifier (PA6 LOW) */
+    GPIOA->BSRR = (1 << (6 + 16));
+
+    audio_playing = 0;
+    audio_seq_len = 0;
+    audio_streaming = 0;
+}
+
+static void audio_start_step(void)
+{
+    AudioStep *step = &audio_seq[audio_seq_idx];
+
+    audio_phase_inc = (uint32_t)step->freq * PHASE_INC_PER_HZ;
+    /* Effective amplitude = step_volume * user_volume * 256 / 10000 */
+    audio_amplitude = (uint16_t)((uint32_t)step->volume * audio_user_volume * 256 / 10000);
+    audio_step_end = systick_ms + step->duration_ms;
+
+    if (!audio_playing)
+        audio_start_hw();
+}
+
+static void audio_play_tone(uint16_t freq, uint16_t duration_ms)
+{
+    audio_stop();
+    audio_seq[0].freq = freq;
+    audio_seq[0].duration_ms = duration_ms;
+    audio_seq[0].volume = 100;
+    audio_seq_len = 1;
+    audio_seq_idx = 0;
+    audio_start_step();
+}
+
+#define ARRAY_LEN(a) (sizeof(a) / sizeof((a)[0]))
+
+static void audio_play_sequence(const AudioStep *steps, uint8_t count)
+{
+    audio_stop();
+    if (count > AUDIO_MAX_STEPS) count = AUDIO_MAX_STEPS;
+    for (uint8_t i = 0; i < count; i++)
+        audio_seq[i] = steps[i];
+    audio_seq_len = count;
+    audio_seq_idx = 0;
+    audio_start_step();
+}
+
+static void audio_update(void)
+{
+    if (!audio_playing || audio_streaming) return;
+    if ((int32_t)(systick_ms - audio_step_end) < 0) return;
+
+    /* Current step finished — advance to next */
+    audio_seq_idx++;
+    if (audio_seq_idx < audio_seq_len) {
+        audio_start_step();
+    } else {
+        audio_stop();
+    }
+}
+
+/* Built-in tone presets (matching stock firmware names) */
+static const AudioStep preset_tap[]  = { {2000,  30, 80} };
+static const AudioStep preset_tone[] = { {800,  200, 60} };
+static const AudioStep preset_bell[] = {
+    {1000, 120, 100}, {1000, 120, 70}, {1000, 120, 45}, {1000, 120, 20},
+};
+static const AudioStep preset_ring[] = {
+    {800, 200, 80}, {0, 100, 0}, {1000, 200, 80}, {0, 100, 0},
+    {800, 200, 80}, {0, 100, 0}, {1000, 200, 80},
+};
+static const AudioStep preset_sweep[] = {
+    {400, 60, 70}, {600, 60, 75}, {800, 60, 80}, {1000, 60, 85},
+    {1200, 60, 80}, {1500, 60, 75}, {2000, 60, 70},
+};
+
+/* ======================================================================
  * Main
  * ====================================================================== */
 
@@ -545,6 +836,9 @@ int main(void)
     fsmc_init();
     lcd_init();
 
+    /* Init audio subsystem (TIM6 + DMA, not started until a tone plays) */
+    audio_init();
+
     /* Fill screen black — two byte writes per pixel */
     lcd_set_window(0, 0, 240, 240);
     for (int i = 0; i < 240 * 240; i++) {
@@ -557,6 +851,44 @@ int main(void)
     while (1) {
         /* Run tinyusb device task (handles USB events) */
         tud_task();
+
+        /* Advance audio sequencer (check step durations) */
+        audio_update();
+
+        /* PCM streaming mode: bulk-read USB data into ring buffer */
+        if (audio_streaming) {
+            uint32_t avail = tud_cdc_available();
+            if (avail >= 2) {
+                uint8_t tmp[512];
+                uint32_t space = STREAM_BUF_SIZE - (stream_wr - stream_rd);
+                uint32_t to_read = avail;
+                if (to_read > sizeof(tmp)) to_read = sizeof(tmp);
+                if (to_read / 2 > space) to_read = space * 2;
+                to_read &= ~1U;  /* even byte count */
+                if (to_read > 0) {
+                    uint32_t got = tud_cdc_read(tmp, to_read);
+                    for (uint32_t i = 0; i + 1 < got; i += 2) {
+                        int16_t s = (int16_t)(tmp[i] | ((uint16_t)tmp[i+1] << 8));
+                        stream_buf[stream_wr & STREAM_BUF_MASK] =
+                            (uint16_t)((s + 32768) >> 4);  /* s16le → 12-bit unsigned */
+                        stream_wr++;
+                    }
+                    stream_last_rx = systick_ms;
+                }
+                /* Start DAC/DMA once ring buffer is half full (pre-buffer) */
+                if (!stream_started &&
+                    (stream_wr - stream_rd) >= STREAM_BUF_SIZE / 2) {
+                    audio_start_hw();
+                    stream_started = 1;
+                }
+            }
+            /* Timeout: stop after 500ms of silence AND buffer drained */
+            if ((systick_ms - stream_last_rx) > 500 &&
+                stream_rd == stream_wr && stream_started) {
+                audio_stop();
+            }
+            continue;
+        }
 
         /* Check for received characters */
         while (tud_cdc_available()) {
@@ -618,6 +950,11 @@ int main(void)
                     cdc_send_str("[info:] hostmsg\r\n");
                     cdc_send_str("[info:] rawfb\r\n");
                     cdc_send_str("[info:] rawrow\r\n");
+                    cdc_send_str("[info:] tone\r\n");
+                    cdc_send_str("[info:] audiostop\r\n");
+                    cdc_send_str("[info:] audiotest\r\n");
+                    cdc_send_str("[info:] volume\r\n");
+                    cdc_send_str("[info:] pcmstream\r\n");
                 }
                 else if (str_eq(cmd_buf, "storedfwhash")) {
                     cdc_send_str("[info:] 00000000000000000000000000000000\r\n");
@@ -750,6 +1087,77 @@ int main(void)
                                 lcd_data((uint8_t)((h << 4) | l));
                             }
                         }
+                    }
+                }
+                /* ---- Audio commands ---- */
+                else if (str_starts_with(cmd_buf, "tone=")) {
+                    /* tone=<freq>,<duration_ms> — play a sine wave */
+                    const char *p = cmd_buf + 5;
+                    uint32_t freq, dur;
+                    if (parse_int(p, &freq)) {
+                        while (*p >= '0' && *p <= '9') p++;
+                        if (*p == ',' && parse_int(p + 1, &dur)) {
+                            if (freq > 0 && freq <= 8000 && dur > 0 && dur <= 10000) {
+                                audio_play_tone((uint16_t)freq, (uint16_t)dur);
+                                cdc_send_str("ok\r\n");
+                            } else {
+                                cdc_send_str("err range\r\n");
+                            }
+                        }
+                    }
+                }
+                else if (str_eq(cmd_buf, "audiostop")) {
+                    audio_stop();
+                    cdc_send_str("ok\r\n");
+                }
+                else if (str_starts_with(cmd_buf, "pcmstream")) {
+                    /* pcmstream or pcmstream=<rate>
+                     * Enters raw PCM streaming mode. Send signed 16-bit LE
+                     * mono samples. Stops on 500ms data timeout. */
+                    uint32_t rate = 22050;  /* default */
+                    if (cmd_buf[9] == '=')
+                        parse_int(cmd_buf + 10, &rate);
+                    if (rate >= 8000 && rate <= 48000) {
+                        audio_stop();
+                        TIM6->CR1 = 0;
+                        TIM6->ARR = (60000000 / rate) - 1;
+                        TIM6->EGR = 1;
+                        TIM6->SR  = 0;
+                        stream_wr = 0;
+                        stream_rd = 0;
+                        stream_started = 0;
+                        stream_last_rx = systick_ms;
+                        audio_amplitude = (uint16_t)(audio_user_volume * 256 / 100);
+                        audio_streaming = 1;
+                        cdc_send_str("ok\r\n");
+                    } else {
+                        cdc_send_str("err rate\r\n");
+                    }
+                }
+                else if (str_starts_with(cmd_buf, "audiotest=")) {
+                    const char *name = cmd_buf + 10;
+                    int ok = 1;
+                    if (str_eq(name, "tap"))
+                        audio_play_sequence(preset_tap, ARRAY_LEN(preset_tap));
+                    else if (str_eq(name, "tone"))
+                        audio_play_sequence(preset_tone, ARRAY_LEN(preset_tone));
+                    else if (str_eq(name, "bell"))
+                        audio_play_sequence(preset_bell, ARRAY_LEN(preset_bell));
+                    else if (str_eq(name, "ring"))
+                        audio_play_sequence(preset_ring, ARRAY_LEN(preset_ring));
+                    else if (str_eq(name, "sweep"))
+                        audio_play_sequence(preset_sweep, ARRAY_LEN(preset_sweep));
+                    else
+                        ok = 0;
+                    cdc_send_str(ok ? "ok\r\n" : "err unknown\r\n");
+                }
+                else if (str_starts_with(cmd_buf, "volume=")) {
+                    uint32_t vol;
+                    if (parse_int(cmd_buf + 7, &vol) && vol <= 100) {
+                        audio_user_volume = (uint8_t)vol;
+                        /* Update amplitude for streaming (tone steps recalculate on next start) */
+                        audio_amplitude = (uint16_t)(vol * 256 / 100);
+                        cdc_send_str("ok\r\n");
                     }
                 }
                 /* else: unknown command, ignore */
