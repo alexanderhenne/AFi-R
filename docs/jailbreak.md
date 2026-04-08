@@ -107,6 +107,32 @@ The web server runs `uh-fw-tool` to verify the firmware. This tool rejects firmw
 
 `uh-fw-tool` (at `/sbin/uh-fw-tool`) verifies and flashes firmware. Out of the box, it only accepts manufacturer-signed firmware, but this can be bypassed.
 
+##### Option A: Replace the signing key (recommended)
+
+Replace the manufacturer's public key with your own so `uh-fw-tool` verifies your signature instead. This maintains the security property that only firmware you've signed is accepted.
+
+The firmware uses **RSA-2048 with SHA-1** signatures. The UBNT firmware format ends with an `ENDS` marker followed by a 256-byte RSA signature. The signature covers all bytes from the start of the file up to (not including) the `ENDS` marker.
+
+`uh-fw-tool` stores the manufacturer's public key in its data section at file offset `0x6000`, XOR-obfuscated with the 4-byte key `81 93 e0 c4`. The tool [fw_sign.py](../tools/fw_sign.py) can extract, replace, sign, and verify:
+
+```bash
+# 1. Generate your own RSA-2048 signing keypair
+python3 tools/fw_sign.py genkey my_fw_key
+
+# 2. Patch uh-fw-tool to trust your public key instead of the manufacturer's
+python3 tools/fw_sign.py patch-uhfwtool /sbin/uh-fw-tool uh-fw-tool_custom --pubkey my_fw_key.pub.pem
+
+# 3. Build your custom firmware, then sign it with your private key
+python3 tools/fw_sign.py sign AFi-R_v4.0.3_custom.bin AFi-R_v4.0.3_signed.bin --privkey my_fw_key.pem
+
+# 4. Verify it worked
+python3 tools/fw_sign.py verify AFi-R_v4.0.3_signed.bin --pubkey my_fw_key.pub.pem
+```
+
+Include the patched `uh-fw-tool_custom` at `/sbin/uh-fw-tool` in your firmware build so future flashes via the web interface only accept firmware signed by you.
+
+##### Option B: Disable signature verification entirely
+
 Patch it to return 0 instead of 0xa when the signature is "bad":
 
 1. Open in Ghidra or IDA and search for "Bad firmware signature"
@@ -115,7 +141,7 @@ Patch it to return 0 instead of 0xa when the signature is "bad":
 
 ![](images/uh-fw-tool-patch.png)
 
-\*Tested on firmware versions 2.0.0, 2.1.1, 2.6.1, 3.1.2, and 3.3.0.
+\*Tested on firmware versions 2.0.0, 2.1.1, 2.6.1, 3.1.2, 3.3.0, and 4.0.3.
 
 #### Building custom firmware
 
