@@ -191,6 +191,25 @@ sudo bash tools/pack_squashfs.sh custom.squashfs
 bash tools/make_firmware.sh AFi-R_v4.0.3.bin custom.squashfs AFi-R_v4.0.3_custom.bin
 ```
 
+#### Disabling password-based SSH
+
+Once key-based auth is working and persisted (see above), disable password authentication in Dropbear to prevent brute-force attacks:
+
+```bash
+rm -rf /tmp/default_cfg
+mkdir -p /tmp/default_cfg
+tar xzf squashfs-root/etc/default.tar.gz -C /tmp/default_cfg
+
+# Disable password auth (key-only)
+sed -i "s/option PasswordAuth 'on'/option PasswordAuth 'off'/" /tmp/default_cfg/etc/config/dropbear
+sed -i "s/option RootPasswordAuth 'on'/option RootPasswordAuth 'off'/" /tmp/default_cfg/etc/config/dropbear
+
+tar czf squashfs-root/etc/default.tar.gz -C /tmp/default_cfg .
+rm -rf /tmp/default_cfg
+```
+
+> **Warning:** Make sure your SSH key is baked into `default.tar.gz` in the same build, otherwise you will be locked out if the persist partition is wiped.
+
 After flashing, the key will survive reboots. You can also update the key at runtime and save with:
 ```bash
 # On the router:
